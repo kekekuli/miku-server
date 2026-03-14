@@ -82,6 +82,8 @@ async function handleSteamCallback(request: Request, env: Env): Promise<Response
 		return json({ error: 'Steam profile not found' }, 404);
 	}
 
+	const squad44Hours = await fetchSquad44Hours(steamId, env.STEAM_API_KEY);
+
 	const redirectUrl = new URL('/', REALM);
 	redirectUrl.searchParams.set('steamId', steamId);
 	redirectUrl.searchParams.set('name', player.personaname);
@@ -90,8 +92,29 @@ async function handleSteamCallback(request: Request, env: Env): Promise<Response
 	if (player.loccountrycode) {
 		redirectUrl.searchParams.set('countryCode', player.loccountrycode);
 	}
+	if (squad44Hours !== null) {
+		redirectUrl.searchParams.set('squad44Hours', squad44Hours.toString());
+	}
 
 	return Response.redirect(redirectUrl.toString(), 302);
+}
+
+async function fetchSquad44Hours(steamId: string, apiKey: string): Promise<number | null> {
+	try {
+		const input = encodeURIComponent(JSON.stringify({ steamid: steamId, appids_filter: [736220], include_appinfo: false }));
+		const url = `https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key=${apiKey}&format=json&input_json=${input}`;
+
+		const response = await fetch(url);
+		if (!response.ok) return null;
+
+		const data = await response.json() as { response: { games?: { appid: number; playtime_forever: number }[] } };
+		const game = data.response.games?.[0];
+		if (!game) return null;
+
+		return Math.round((game.playtime_forever / 60) * 10) / 10;
+	} catch {
+		return null;
+	}
 }
 
 function json(data: unknown, status = 200): Response {

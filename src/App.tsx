@@ -7,6 +7,7 @@ export interface SteamProfile {
 	avatar: string;
 	profileUrl: string;
 	countryCode: string | null;
+	squad44Hours: number | null;
 }
 
 function parseProfile(): SteamProfile | null {
@@ -18,12 +19,15 @@ function parseProfile(): SteamProfile | null {
 
 	if (!steamId || !name || !avatar || !profileUrl) return null;
 
+	const rawHours = params.get('squad44Hours');
+
 	return {
 		steamId,
 		name,
 		avatar,
 		profileUrl,
 		countryCode: params.get('countryCode'),
+		squad44Hours: rawHours !== null ? parseFloat(rawHours) : null,
 	};
 }
 

@@ -88,6 +88,12 @@ body {
 	letter-spacing: 0.05em;
 }
 
+.tip {
+	color: #8f98a0;
+	font-style: italic;
+	font-size: 0.82rem;
+}
+
 .actions {
 	display: flex;
 	flex-direction: column;
