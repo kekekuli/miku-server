@@ -6,10 +6,15 @@
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "miku-server",
 	"compatibility_date": "2026-03-12",
+	"main": "worker/index.ts",
 	"assets": {
 		// The path to the directory containing the `index.html` file to be served at `/`
-		"directory": "./public"
+		"directory": "./dist",
+		"binding": "ASSETS"
 	},
+	"routes": [
+		{ "pattern": "miku-server.org/*", "zone_name": "miku-server.org" }
+	],
 	"observability": {
 		"enabled": true
 	},
