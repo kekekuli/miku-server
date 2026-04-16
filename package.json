@@ -1,25 +1,26 @@
 {
-	"name": "miku-server",
-	"version": "0.0.0",
-	"private": true,
-	"scripts": {
-		"dev": "vite",
-		"build": "vite build",
-		"deploy": "vite build && wrangler deploy",
-		"worker:dev": "wrangler dev"
-	},
-	"devDependencies": {
-		"@cloudflare/workers-types": "^4.20260313.1",
-		"@types/react": "^19.2.14",
-		"@types/react-dom": "^19.2.3",
-		"@vitejs/plugin-react": "^6.0.1",
-		"typescript": "^5.9.3",
-		"vite": "^8.0.0",
-		"wrangler": "^4.73.0"
-	},
-	"dependencies": {
-		"react": "^19.2.4",
-		"react-dom": "^19.2.4",
-		"styled-components": "^6.3.11"
-	}
+  "name": "miku-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler types && vite",
+    "build": "vite build",
+    "deploy": "vite build && wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.32.3",
+    "@cloudflare/workers-types": "^4.20260313.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.0",
+    "wrangler": "^4.73.0"
+  },
+  "dependencies": {
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "styled-components": "^6.3.11"
+  }
 }
