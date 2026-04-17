@@ -33,6 +33,42 @@ function handleSteamLogin(origin: string): Response {
 
 async function handleSteamCallback(request: Request, env: Env, origin: string): Promise<Response> {
   const url = new URL(request.url);
+  const isValid = await verifySteam(url);
+  if (!isValid) {
+    return Response.redirect(origin, 302);
+  }
+  const profile = await getSteamProfile(url, env.STEAM_API_KEY);
+  if ('error' in profile) {
+    return Response.redirect(origin, 302);
+  }
+  const token = await signJWT(profile, env.JWT_SECRET, env.JWT_EXPIRES_IN);
+}
+
+async function signJWT(profile: SteamPlayer, secret: string, expiresIn: string): Promise<string> {
+  const units: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400 };
+  const match = expiresIn.match(/^(\d+)([smhd])$/);
+  if (!match) throw new Error(`Invalid expiresIn: ${expiresIn}`);
+  const exp = Math.floor(Date.now() / 1000) + parseInt(match[1]) * units[match[2]];
+
+  const b64url = (str: string) => btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const payload = b64url(JSON.stringify({ ...profile, exp }));
+  const data = `${header}.${payload}`;
+
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
+  const signature = b64url(String.fromCharCode(...new Uint8Array(sig)));
+
+  return `${data}.${signature}`;
+}
+
+async function verifySteam(url: URL): Promise<Boolean> {
   const params = Object.fromEntries(url.searchParams);
 
   // Verify the response with Steam
@@ -47,76 +83,64 @@ async function handleSteamCallback(request: Request, env: Env, origin: string): 
 
   const verifyText = await verifyResponse.text();
 
-  if (!verifyText.includes('is_valid:true')) {
-    return json({ error: 'Steam authentication failed' }, 401);
-  }
+  return verifyText.includes('is_valid:true');
+}
+
+async function getSteamProfile(url: URL, apiKey: string): Promise<SteamPlayer | { error: string }> {
+  const params = Object.fromEntries(url.searchParams);
 
   // Extract SteamID from the claimed_id URL
   const claimedId = params['openid.claimed_id'] ?? '';
   const steamId = claimedId.split('/').pop();
 
   if (!steamId || !/^\d+$/.test(steamId)) {
-    return json({ error: 'Could not extract SteamID' }, 400);
+    return { error: 'Invalid SteamID' };
   }
 
   // Fetch Steam profile
   const profileUrl = new URL('https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/');
-  profileUrl.searchParams.set('key', env.STEAM_API_KEY);
+  profileUrl.searchParams.set('key', apiKey);
   profileUrl.searchParams.set('steamids', steamId);
 
   const profileResponse = await fetch(profileUrl);
 
   if (!profileResponse.ok) {
-    return json({ error: 'Failed to fetch Steam profile' }, 502);
+    return { error: 'Failed to fetch Steam profile' };
   }
 
   const profileData = await profileResponse.json() as { response: { players: SteamPlayer[] } };
   const player = profileData.response.players[0];
 
   if (!player) {
-    return json({ error: 'Steam profile not found' }, 404);
+    return { error: 'Steam profile not found' };
   }
 
-  const squad44Hours = await fetchSquad44Hours(steamId, env.STEAM_API_KEY);
+  const [squad44Hours] = await fetchGamesHours(steamId, apiKey, [{ appid: 736220 }]);
 
-  const redirectUrl = new URL('/', origin);
-  redirectUrl.searchParams.set('steamId', steamId);
-  redirectUrl.searchParams.set('name', player.personaname);
-  redirectUrl.searchParams.set('avatar', player.avatarfull);
-  redirectUrl.searchParams.set('profileUrl', player.profileurl);
-  if (player.loccountrycode) {
-    redirectUrl.searchParams.set('countryCode', player.loccountrycode);
-  }
-  if (squad44Hours !== null) {
-    redirectUrl.searchParams.set('squad44Hours', squad44Hours.toString());
-  }
-
-  return Response.redirect(redirectUrl.toString(), 302);
+  return {
+    ...player,
+    squad44Hours,
+  };
 }
 
-async function fetchSquad44Hours(steamId: string, apiKey: string): Promise<number | null> {
+async function fetchGamesHours(steamId: string, apiKey: string, games: GameIdentify[]): Promise<(number | null)[]> {
   try {
-    const input = encodeURIComponent(JSON.stringify({ steamid: steamId, appids_filter: [736220], include_appinfo: false }));
+    const input = encodeURIComponent(JSON.stringify({ steamid: steamId, appids_filter: games.map(g => g.appid), include_appinfo: false }));
     const url = `https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key=${apiKey}&format=json&input_json=${input}`;
 
     const response = await fetch(url);
-    if (!response.ok) return null;
+    if (!response.ok) return games.map(() => null);
 
     const data = await response.json() as { response: { games?: { appid: number; playtime_forever: number }[] } };
-    const game = data.response.games?.[0];
-    if (!game) return null;
+    const fetched = data.response.games ?? [];
 
-    return Math.round((game.playtime_forever / 60) * 10) / 10;
+    return games.map(g => {
+      const game = fetched.find(r => r.appid === g.appid);
+      return game ? Math.round((game.playtime_forever / 60) * 10) / 10 : null;
+    });
   } catch {
-    return null;
+    return games.map(() => null);
   }
-}
-
-function json(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
 }
 
 interface SteamPlayer {
@@ -125,4 +149,9 @@ interface SteamPlayer {
   profileurl: string;
   avatarfull: string;
   loccountrycode?: string;
+  squad44Hours?: number | null;
+}
+
+interface GameIdentify {
+  appid: number;
 }
