@@ -6,16 +6,23 @@
   "scripts": {
     "dev": "wrangler types && vite",
     "build": "vite build",
-    "deploy": "vite build && wrangler deploy"
+    "deploy": "vite build && wrangler deploy",
+    "lint": "eslint src worker"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.32.3",
     "@cloudflare/workers-types": "^4.20260313.1",
+    "@eslint/js": "^9.39.4",
     "@styled/typescript-styled-plugin": "^1.0.1",
+    "@types/node": "^25.6.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
     "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^9.39.4",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.2",
     "vite": "^8.0.0",
     "wrangler": "^4.73.0"
   },

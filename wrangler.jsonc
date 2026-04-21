@@ -20,6 +20,9 @@
 	},
 	"compatibility_flags": [
 		"nodejs_compat"
+	],
+	"kv_namespaces": [
+		{ "binding": "STEAM_PROFILE_CACHE", "id": "bbf1a40d334c4f6f920ea56461873a25" }
 	]
 	/**
 	 * Smart Placement

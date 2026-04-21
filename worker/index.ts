@@ -14,6 +14,9 @@ export default {
       return handleSteamCallback(request, env, origin);
     }
 
+    if (url.pathname === '/api/me') {
+    }
+
     return env.ASSETS.fetch(request);
   },
 };
@@ -28,7 +31,7 @@ function handleSteamLogin(origin: string): Response {
     'openid.claimed_id': 'http://specs.openid.net/auth/2.0/identifier_select',
   });
 
-  return Response.redirect(`${STEAM_OPENID_URL}?${params}`, 302);
+  return Response.redirect(`${STEAM_OPENID_URL}?${params.toString()}`, 302);
 }
 
 async function handleSteamCallback(request: Request, env: Env, origin: string): Promise<Response> {
@@ -37,11 +40,33 @@ async function handleSteamCallback(request: Request, env: Env, origin: string): 
   if (!isValid) {
     return Response.redirect(origin, 302);
   }
-  const profile = await getSteamProfile(url, env.STEAM_API_KEY);
-  if ('error' in profile) {
+  const steamId = url.searchParams.get('openid.claimed_id');
+  if (!steamId || !/^\d+$/.test(steamId)) {
+    throw new Error('Invalid SteamID');
+  }
+
+  try {
+    const cached = await env.STEAM_PROFILE_CACHE.get(steamId);
+    const profile = cached
+      ? (JSON.parse(cached) as SteamPlayer)
+      : (await getSteamProfile(steamId, env.STEAM_API_KEY));
+
+    if (!cached)
+      await env.STEAM_PROFILE_CACHE.put(steamId, JSON.stringify(profile), { expirationTtl: 60 * 60 });
+
+    const token = await signJWT(profile, env.JWT_SECRET, env.JWT_EXPIRES_IN);
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: origin,
+        'Set-Cookie': `token=${token}; Path=/; SameSite=Lax; Secure; HttpOnly`,
+      },
+    })
+
+  } catch {
+    //TODO: use something like dialog
     return Response.redirect(origin, 302);
   }
-  const token = await signJWT(profile, env.JWT_SECRET, env.JWT_EXPIRES_IN);
 }
 
 async function signJWT(profile: SteamPlayer, secret: string, expiresIn: string): Promise<string> {
@@ -52,7 +77,7 @@ async function signJWT(profile: SteamPlayer, secret: string, expiresIn: string):
 
   const b64url = (str: string) => btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
   const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const payload = b64url(JSON.stringify({ ...profile, exp }));
+  const payload = b64url(JSON.stringify({ steamid: profile.steamid, exp }));
   const data = `${header}.${payload}`;
 
   const key = await crypto.subtle.importKey(
@@ -68,7 +93,7 @@ async function signJWT(profile: SteamPlayer, secret: string, expiresIn: string):
   return `${data}.${signature}`;
 }
 
-async function verifySteam(url: URL): Promise<Boolean> {
+async function verifySteam(url: URL): Promise<boolean> {
   const params = Object.fromEntries(url.searchParams);
 
   // Verify the response with Steam
@@ -86,36 +111,26 @@ async function verifySteam(url: URL): Promise<Boolean> {
   return verifyText.includes('is_valid:true');
 }
 
-async function getSteamProfile(url: URL, apiKey: string): Promise<SteamPlayer | { error: string }> {
-  const params = Object.fromEntries(url.searchParams);
-
-  // Extract SteamID from the claimed_id URL
-  const claimedId = params['openid.claimed_id'] ?? '';
-  const steamId = claimedId.split('/').pop();
-
-  if (!steamId || !/^\d+$/.test(steamId)) {
-    return { error: 'Invalid SteamID' };
-  }
-
+async function getSteamProfile(validSteamId: string, apiKey: string): Promise<SteamPlayer> {
   // Fetch Steam profile
   const profileUrl = new URL('https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/');
   profileUrl.searchParams.set('key', apiKey);
-  profileUrl.searchParams.set('steamids', steamId);
+  profileUrl.searchParams.set('steamids', validSteamId);
 
   const profileResponse = await fetch(profileUrl);
 
   if (!profileResponse.ok) {
-    return { error: 'Failed to fetch Steam profile' };
+    throw new Error('Failed to fetch Steam profile');
   }
 
-  const profileData = await profileResponse.json() as { response: { players: SteamPlayer[] } };
+  const profileData: { response: { players: SteamPlayer[] } } = await profileResponse.json();
   const player = profileData.response.players[0];
 
   if (!player) {
-    return { error: 'Steam profile not found' };
+    throw new Error('Steam profile not found');
   }
 
-  const [squad44Hours] = await fetchGamesHours(steamId, apiKey, [{ appid: 736220 }]);
+  const [squad44Hours] = await fetchGamesHours(validSteamId, apiKey, [{ appid: 736220 }]);
 
   return {
     ...player,
@@ -131,7 +146,7 @@ async function fetchGamesHours(steamId: string, apiKey: string, games: GameIdent
     const response = await fetch(url);
     if (!response.ok) return games.map(() => null);
 
-    const data = await response.json() as { response: { games?: { appid: number; playtime_forever: number }[] } };
+    const data: { response: { games?: { appid: number; playtime_forever: number }[] } } = await response.json();
     const fetched = data.response.games ?? [];
 
     return games.map(g => {
