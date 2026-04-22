@@ -1,27 +1,32 @@
 const STEAM_OPENID_URL = 'https://steamcommunity.com/openid/login';
 
+type Handler = (request: Request, env: Env) => Response | Promise<Response>;
+
+interface Route {
+  method: string;
+  path: string;
+  handler: Handler;
+}
+
+const routes: Route[] = [
+  { method: 'GET', path: '/auth/steam', handler: handleSteamLogin },
+  { method: 'GET', path: '/auth/steam/callback', handler: handleSteamCallback },
+  { method: 'GET', path: '/api/me', handler: getMe },
+];
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    const route = routes.find(r => r.method === request.method && r.path === url.pathname);
 
-    const origin = `${url.protocol}//${url.host}`;
-
-    if (url.pathname === '/auth/steam') {
-      return handleSteamLogin(origin);
-    }
-
-    if (url.pathname === '/auth/steam/callback') {
-      return handleSteamCallback(request, env, origin);
-    }
-
-    if (url.pathname === '/api/me') {
-    }
-
+    if (route) return route.handler(request, env);
     return env.ASSETS.fetch(request);
   },
 };
 
-function handleSteamLogin(origin: string): Response {
+function handleSteamLogin(request: Request): Response {
+  const url = new URL(request.url);
+  const origin = `${url.protocol}//${url.host}`;
   const params = new URLSearchParams({
     'openid.ns': 'http://specs.openid.net/auth/2.0',
     'openid.mode': 'checkid_setup',
@@ -34,8 +39,9 @@ function handleSteamLogin(origin: string): Response {
   return Response.redirect(`${STEAM_OPENID_URL}?${params.toString()}`, 302);
 }
 
-async function handleSteamCallback(request: Request, env: Env, origin: string): Promise<Response> {
+async function handleSteamCallback(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
+  const origin = `${url.protocol}//${url.host}`;
   const isValid = await verifySteam(url);
   if (!isValid) {
     return Response.redirect(origin, 302);
@@ -46,15 +52,8 @@ async function handleSteamCallback(request: Request, env: Env, origin: string): 
   }
 
   try {
-    const cached = await env.STEAM_PROFILE_CACHE.get(steamId);
-    const profile = cached
-      ? (JSON.parse(cached) as SteamPlayer)
-      : (await getSteamProfile(steamId, env.STEAM_API_KEY));
-
-    if (!cached)
-      await env.STEAM_PROFILE_CACHE.put(steamId, JSON.stringify(profile), { expirationTtl: 60 * 60 });
-
-    const token = await signJWT(profile, env.JWT_SECRET, env.JWT_EXPIRES_IN);
+    const profile = await getSteamProfile(steamId, env);
+    const token = await issueJWT(profile, env.JWT_SECRET, env.JWT_EXPIRES_IN);
     return new Response(null, {
       status: 302,
       headers: {
@@ -69,16 +68,70 @@ async function handleSteamCallback(request: Request, env: Env, origin: string): 
   }
 }
 
-async function signJWT(profile: SteamPlayer, secret: string, expiresIn: string): Promise<string> {
+async function getMe(request: Request, env: Env): Promise<Response> {
+  const token = parseCookie(request.headers.get('Cookie') ?? '')['token'];
+  if (!token) return new Response('Unauthorized', { status: 401 });
+
+  const payload = await verifyJWT(token, env.JWT_SECRET);
+  if (!payload) return new Response('Unauthorized', { status: 401 });
+
+  const profile = await getSteamProfile(payload.steamid, env);
+  return Response.json(profile);
+}
+
+function parseCookie(cookie: string): Record<string, string> {
+  return Object.fromEntries(
+    cookie.split(';').flatMap(part => {
+      const [key, ...rest] = part.trim().split('=');
+      return key ? [[key, rest.join('=')]] : [];
+    })
+  );
+}
+
+async function verifyJWT(token: string, secret: string): Promise<{ steamid: string; exp: number } | null> {
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+
+  const [header, payload, signature] = parts;
+
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['verify'],
+  );
+
+  const b64decode = (str: string) =>
+    Uint8Array.fromBase64(str, { alphabet: 'base64url' });
+
+  const isValid = await crypto.subtle.verify(
+    'HMAC',
+    key,
+    b64decode(signature),
+    new TextEncoder().encode(`${header}.${payload}`),
+  );
+  if (!isValid) return null;
+
+  const decoded = JSON.parse(new TextDecoder().decode(b64decode(payload))) as { steamid: string; exp: number };
+  if (decoded.exp < Math.floor(Date.now() / 1000)) return null;
+
+  return decoded;
+}
+
+async function issueJWT(profile: SteamPlayer, secret: string, expiresIn: string): Promise<string> {
   const units: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400 };
   const match = expiresIn.match(/^(\d+)([smhd])$/);
   if (!match) throw new Error(`Invalid expiresIn: ${expiresIn}`);
   const exp = Math.floor(Date.now() / 1000) + parseInt(match[1]) * units[match[2]];
 
-  const b64url = (str: string) => btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-  const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const payload = b64url(JSON.stringify({ steamid: profile.steamid, exp }));
-  const data = `${header}.${payload}`;
+  const encoder = new TextEncoder();
+  const headerBytes = encoder.encode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const payloadBytes = encoder.encode(JSON.stringify({ steamid: profile.steamid, exp }))
+  const headerB64Url = headerBytes.toBase64({ alphabet: 'base64url', omitPadding: true })
+  const payloadB64Url = payloadBytes.toBase64({ alphabet: 'base64url', omitPadding: true })
+
+  const data = `${headerB64Url}.${payloadB64Url}`;
 
   const key = await crypto.subtle.importKey(
     'raw',
@@ -87,9 +140,9 @@ async function signJWT(profile: SteamPlayer, secret: string, expiresIn: string):
     false,
     ['sign'],
   );
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
-  const signature = b64url(String.fromCharCode(...new Uint8Array(sig)));
 
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
+  const signature = new Uint8Array(sig).toBase64({ alphabet: 'base64url', omitPadding: true });
   return `${data}.${signature}`;
 }
 
@@ -111,10 +164,12 @@ async function verifySteam(url: URL): Promise<boolean> {
   return verifyText.includes('is_valid:true');
 }
 
-async function getSteamProfile(validSteamId: string, apiKey: string): Promise<SteamPlayer> {
-  // Fetch Steam profile
+async function getSteamProfile(validSteamId: string, env: Env): Promise<SteamPlayer> {
+  const cached = await env.STEAM_PROFILE_CACHE.get(validSteamId);
+  if (cached) return JSON.parse(cached) as SteamPlayer;
+
   const profileUrl = new URL('https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/');
-  profileUrl.searchParams.set('key', apiKey);
+  profileUrl.searchParams.set('key', env.STEAM_API_KEY);
   profileUrl.searchParams.set('steamids', validSteamId);
 
   const profileResponse = await fetch(profileUrl);
@@ -130,12 +185,12 @@ async function getSteamProfile(validSteamId: string, apiKey: string): Promise<St
     throw new Error('Steam profile not found');
   }
 
-  const [squad44Hours] = await fetchGamesHours(validSteamId, apiKey, [{ appid: 736220 }]);
+  const [squad44Hours] = await fetchGamesHours(validSteamId, env.STEAM_API_KEY, [{ appid: 736220 }]);
 
-  return {
-    ...player,
-    squad44Hours,
-  };
+  const profile = { ...player, squad44Hours };
+  await env.STEAM_PROFILE_CACHE.put(validSteamId, JSON.stringify(profile), { expirationTtl: 60 * 60 });
+
+  return profile;
 }
 
 async function fetchGamesHours(steamId: string, apiKey: string, games: GameIdentify[]): Promise<(number | null)[]> {
