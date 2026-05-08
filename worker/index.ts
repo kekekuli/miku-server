@@ -1,4 +1,4 @@
-import type { SteamProfile } from '../shared/types';
+import type { GameStatus, SteamProfile } from '../shared/types';
 
 const STEAM_OPENID_URL = 'https://steamcommunity.com/openid/login';
 
@@ -202,7 +202,7 @@ async function getSteamProfile(validSteamId: string, env: Env): Promise<SteamPro
     throw new Error('Steam profile not found');
   }
 
-  const [squad44Hours] = await fetchGamesHours(validSteamId, env.STEAM_API_KEY, [{ appid: 736220 }]);
+  const [squad44Status] = await fetchGamesHours(validSteamId, env.STEAM_API_KEY, [{ appid: 736220 }]);
 
   const profile: SteamProfile = {
     steamId: player.steamid,
@@ -210,14 +210,14 @@ async function getSteamProfile(validSteamId: string, env: Env): Promise<SteamPro
     avatar: player.avatarfull,
     profileUrl: player.profileurl,
     countryCode: player.loccountrycode ?? null,
-    squad44Hours: squad44Hours ?? null,
+    squad44Status: squad44Status ?? null,
   };
   await env.STEAM_PROFILE_CACHE.put(validSteamId, JSON.stringify(profile), { expirationTtl: 60 * 60 });
 
   return profile;
 }
 
-async function fetchGamesHours(steamId: string, apiKey: string, games: GameIdentify[]): Promise<(number | null)[]> {
+async function fetchGamesHours(steamId: string, apiKey: string, games: GameIdentify[]): Promise<(GameStatus | null)[]> {
   try {
     const input = encodeURIComponent(JSON.stringify({ steamid: steamId, appids_filter: games.map(g => g.appid), include_appinfo: false }));
     const url = `https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key=${apiKey}&format=json&input_json=${input}`;
@@ -225,13 +225,10 @@ async function fetchGamesHours(steamId: string, apiKey: string, games: GameIdent
     const response = await fetch(url);
     if (!response.ok) return games.map(() => null);
 
-    const data: { response: { games?: { appid: number; playtime_forever: number }[] } } = await response.json();
+    const data: { response: { games?: GameStatus[] } } = await response.json();
     const fetched = data.response.games ?? [];
 
-    return games.map(g => {
-      const game = fetched.find(r => r.appid === g.appid);
-      return game ? Math.round((game.playtime_forever / 60) * 10) / 10 : null;
-    });
+    return games.map(g => fetched.find(r => r.appid === g.appid) ?? null);
   } catch {
     return games.map(() => null);
   }

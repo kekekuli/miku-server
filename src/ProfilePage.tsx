@@ -39,11 +39,6 @@ const Label = styled.span`
 	letter-spacing: 0.05em;
 `;
 
-const Tip = styled.span`
-	color: #8f98a0;
-	font-style: italic;
-	font-size: 0.82rem;
-`;
 
 const Actions = styled.div`
 	display: flex;
@@ -84,41 +79,44 @@ const SecondaryBtn = styled.a`
 `;
 
 interface Props {
-	profile: SteamProfile;
+  profile: SteamProfile;
 }
 
+const toHours = (minutes: number) => Math.round(minutes / 60 * 10) / 10;
+
 export default function ProfilePage({ profile }: Props) {
-	return (
-		<Page>
-			<Card>
-				<Avatar src={profile.avatar} alt={profile.name} />
-				<Name>{profile.name}</Name>
-				{profile.countryCode && (
-					<Flag
-						src={`https://flagcdn.com/24x18/${profile.countryCode.toLowerCase()}.png`}
-						alt={profile.countryCode}
-						title={profile.countryCode}
-					/>
-				)}
-				<Meta>
-					<Label>Steam ID</Label>
-					<span>{profile.steamId}</span>
-				</Meta>
-				<Meta>
-					<Label>Squad 44</Label>
-					{profile.squad44Hours !== null ? (
-						<span>已游玩 {profile.squad44Hours} 小时</span>
-					) : (
-						<Tip>无法获取游戏时长 — 请将 Steam 隐私设置中的「游戏详情」设为公开。</Tip>
-					)}
-				</Meta>
-				<Actions>
-					<PrimaryBtn href={profile.profileUrl} target="_blank" rel="noreferrer">
-						查看 Steam 个人资料
-					</PrimaryBtn>
-					<SecondaryBtn href="/auth/logout">退出登录</SecondaryBtn>
-				</Actions>
-			</Card>
-		</Page>
-	);
+  const status = profile.squad44Status;
+  const totalHours = status ? toHours(status.playtime_forever) : null;
+  const recentHours = status?.playtime_2weeks !== undefined ? toHours(status.playtime_2weeks) : null;
+
+  return (
+    <Page>
+      <Card>
+        <Avatar src={profile.avatar} alt={profile.name} />
+        <Name>{profile.name}</Name>
+        {profile.countryCode && (
+          <Flag
+            src={`https://flagcdn.com/24x18/${profile.countryCode.toLowerCase()}.png`}
+            alt={profile.countryCode}
+            title={profile.countryCode}
+          />
+        )}
+        <Meta>
+          <Label>Steam ID</Label>
+          <span>{profile.steamId}</span>
+        </Meta>
+        <Meta>
+          <Label>Squad 44</Label>
+          <span>总计 {totalHours !== null ? `${totalHours} 小时` : '—'}</span>
+          <span>近两周 {recentHours !== null ? `${recentHours} 小时` : '—'}</span>
+        </Meta>
+        <Actions>
+          <PrimaryBtn href={profile.profileUrl} target="_blank" rel="noreferrer">
+            查看 Steam 个人资料
+          </PrimaryBtn>
+          <SecondaryBtn href="/auth/logout">退出登录</SecondaryBtn>
+        </Actions>
+      </Card>
+    </Page>
+  );
 }
