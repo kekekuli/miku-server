@@ -1,26 +1,19 @@
 import styled, { createGlobalStyle } from 'styled-components';
 
 export const GlobalStyle = createGlobalStyle`
-	*, *::before, *::after {
-		box-sizing: border-box;
+	html, body {
 		margin: 0;
-		padding: 0;
-	}
-
-	body {
-		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 		background: #1b2838;
-		color: #c6d4df;
-		min-height: 100vh;
 	}
 `;
 
 export const Page = styled.div`
-	min-height: 100vh;
+	flex: 1;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	padding: 1rem;
+	background: #1b2838;
 `;
 
 export const Card = styled.div`

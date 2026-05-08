@@ -1,4 +1,5 @@
 import styled from 'styled-components';
+import { Heading, Text } from '@radix-ui/themes';
 import { Page, Card } from './styles';
 import type { SteamProfile } from '../shared/types';
 
@@ -8,12 +9,6 @@ const Avatar = styled.img`
 	border-radius: 6px;
 	border: 2px solid #66c0f4;
 	margin-bottom: 1rem;
-`;
-
-const Name = styled.h2`
-	font-size: 1.4rem;
-	color: #ffffff;
-	margin-bottom: 0.4rem;
 `;
 
 const Flag = styled.img`
@@ -30,13 +25,6 @@ const Meta = styled.div`
 	padding: 0.75rem 1rem;
 	margin-bottom: 1rem;
 	font-size: 0.85rem;
-`;
-
-const Label = styled.span`
-	color: #8f98a0;
-	font-size: 0.75rem;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
 `;
 
 
@@ -93,7 +81,7 @@ export default function ProfilePage({ profile }: Props) {
     <Page>
       <Card>
         <Avatar src={profile.avatar} alt={profile.name} />
-        <Name>{profile.name}</Name>
+        <Heading size="5" mb="1">{profile.name}</Heading>
         {profile.countryCode && (
           <Flag
             src={`https://flagcdn.com/24x18/${profile.countryCode.toLowerCase()}.png`}
@@ -102,11 +90,11 @@ export default function ProfilePage({ profile }: Props) {
           />
         )}
         <Meta>
-          <Label>Steam ID</Label>
+          <Text size="1" color="gray" weight="medium" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>Steam ID</Text>
           <span>{profile.steamId}</span>
         </Meta>
         <Meta>
-          <Label>Squad 44</Label>
+          <Text size="1" color="gray" weight="medium" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>Squad 44</Text>
           <span>总计 {totalHours !== null ? `${totalHours} 小时` : '—'}</span>
           <span>近两周 {recentHours !== null ? `${recentHours} 小时` : '—'}</span>
         </Meta>

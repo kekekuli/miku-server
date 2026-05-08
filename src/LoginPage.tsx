@@ -1,17 +1,6 @@
 import styled from 'styled-components';
+import { Heading, Text } from '@radix-ui/themes';
 import { Page, Card } from './styles';
-
-const Title = styled.h1`
-	font-size: 1.8rem;
-	color: #ffffff;
-	margin-bottom: 0.5rem;
-`;
-
-const Subtitle = styled.p`
-	color: #8f98a0;
-	margin-bottom: 1.5rem;
-	font-size: 0.95rem;
-`;
 
 const SteamBtn = styled.a`
 	display: inline-block;
@@ -26,8 +15,8 @@ export default function LoginPage() {
 	return (
 		<Page>
 			<Card>
-				<Title>Miku Server</Title>
-				<Subtitle>使用你的 Steam 账号登录以继续。</Subtitle>
+				<Heading size="7" mb="2">Miku Server</Heading>
+				<Text as="p" size="2" color="gray" mb="5">使用你的 Steam 账号登录以继续。</Text>
 				<SteamBtn href="/auth/steam">
 					<img
 						src="https://community.fastly.steamstatic.com/public/images/signinthroughsteam/sits_01.png"
