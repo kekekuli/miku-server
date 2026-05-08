@@ -7,7 +7,9 @@
     "dev": "wrangler types && vite",
     "build": "vite build",
     "deploy": "vite build && wrangler deploy",
-    "lint": "eslint src worker"
+    "lint": "eslint src worker",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "wrangler d1 migrations apply miku-votes"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.32.3",
@@ -20,6 +22,7 @@
     "@typescript-eslint/eslint-plugin": "^8.59.0",
     "@typescript-eslint/parser": "^8.59.0",
     "@vitejs/plugin-react": "^6.0.1",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9.39.4",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.0",
@@ -29,6 +32,7 @@
   "dependencies": {
     "@radix-ui/themes": "^3.3.0",
     "@reduxjs/toolkit": "^2.11.2",
+    "drizzle-orm": "^0.45.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-redux": "^9.2.0",
