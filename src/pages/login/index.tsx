@@ -1,6 +1,6 @@
 import styled from 'styled-components';
 import { Heading, Text } from '@radix-ui/themes';
-import { Page, Card } from './styles';
+import { Page, Card } from '../../lib/styles';
 
 const SteamBtn = styled.a`
 	display: inline-block;

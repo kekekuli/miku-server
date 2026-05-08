@@ -1,7 +1,7 @@
 import styled from 'styled-components';
 import { Heading, Text } from '@radix-ui/themes';
-import { Page, Card } from './styles';
-import type { SteamProfile } from '../shared/types';
+import { Page, Card } from '../../lib/styles';
+import { useGetMeQuery } from '../../lib/api';
 
 const Avatar = styled.img`
 	width: 100px;
@@ -66,13 +66,12 @@ const SecondaryBtn = styled.a`
 	}
 `;
 
-interface Props {
-  profile: SteamProfile;
-}
-
 const toHours = (minutes: number) => Math.round(minutes / 60 * 10) / 10;
 
-export default function ProfilePage({ profile }: Props) {
+export default function ProfilePage() {
+  const { data: profile } = useGetMeQuery();
+  if (!profile) return null;
+
   const status = profile.squad44Status;
   const totalHours = status ? toHours(status.playtime_forever) : null;
   const recentHours = status?.playtime_2weeks !== undefined ? toHours(status.playtime_2weeks) : null;

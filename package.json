@@ -33,9 +33,11 @@
     "@radix-ui/themes": "^3.3.0",
     "@reduxjs/toolkit": "^2.11.2",
     "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.18",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-redux": "^9.2.0",
+    "react-router-dom": "^7.15.0",
     "styled-components": "^6.3.11"
   }
 }

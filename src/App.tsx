@@ -1,8 +1,10 @@
 import { Flex } from '@radix-ui/themes';
-import Header from './Header';
-import LoginPage from './LoginPage';
-import ProfilePage from './ProfilePage';
-import { useGetMeQuery } from './api';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import Header from './components/Header';
+import LoginPage from './pages/login';
+import ProfilePage from './pages/profile';
+import VotePage from './pages/vote';
+import { useGetMeQuery } from './lib/api';
 
 export default function App() {
   const { data: profile, isLoading } = useGetMeQuery();
@@ -12,7 +14,17 @@ export default function App() {
   return (
     <Flex direction="column" style={{ minHeight: '100vh' }}>
       <Header />
-      {profile ? <ProfilePage profile={profile} /> : <LoginPage />}
+      <Routes>
+        {profile ? (
+          <>
+            <Route path="/" element={<ProfilePage />} />
+            <Route path="/vote" element={<VotePage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </>
+        ) : (
+          <Route path="*" element={<LoginPage />} />
+        )}
+      </Routes>
     </Flex>
   );
 }
