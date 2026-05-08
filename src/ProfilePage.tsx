@@ -1,6 +1,6 @@
 import styled from 'styled-components';
 import { Page, Card } from './styles';
-import type { SteamProfile } from './App';
+import type { SteamProfile } from '../shared/types';
 
 const Avatar = styled.img`
 	width: 100px;
