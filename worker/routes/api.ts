@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
+import { eq } from 'drizzle-orm';
 import { candidates } from '../../db/schema';
 import { getSteamProfile } from '../lib/steam';
 import { requireAuth } from './auth';
@@ -23,10 +24,16 @@ api.post('/candidates', requireAuth, async c => {
   const profile = await getSteamProfile(targetId, c.env);
   const db = drizzle(c.env.DB);
 
+  const existing = await db.select().from(candidates).where(eq(candidates.steamId, profile.steamId)).get();
+
   await db.insert(candidates)
     .values({ steamId: profile.steamId, name: profile.name, avatar: profile.avatar })
-    .onConflictDoNothing();
+    .onConflictDoUpdate({
+      target: candidates.steamId,
+      set: { name: profile.name, avatar: profile.avatar },
+    });
 
+  if (existing) return c.text('重复的候选人', 409);
   return c.json({ steamId: profile.steamId, name: profile.name, avatar: profile.avatar }, 201);
 });
 

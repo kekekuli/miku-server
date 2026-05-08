@@ -4,6 +4,7 @@ import Header from './components/Header';
 import LoginPage from './pages/login';
 import ProfilePage from './pages/profile';
 import VotePage from './pages/vote';
+import ModalProvider from './components/ModalProvider';
 import { useGetMeQuery } from './lib/api';
 
 export default function App() {
@@ -13,6 +14,7 @@ export default function App() {
 
   return (
     <Flex direction="column" style={{ minHeight: '100vh' }}>
+      <ModalProvider />
       <Header />
       <Routes>
         {profile ? (

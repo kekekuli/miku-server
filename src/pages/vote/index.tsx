@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useDispatch } from 'react-redux';
 import styled from 'styled-components';
 import { Button, Flex, Text, TextField } from '@radix-ui/themes';
 import {
@@ -9,6 +10,7 @@ import {
   useNominateMutation,
 } from '../../lib/api';
 import CandidateCard from '../../components/CandidateCard';
+import { openModal } from '../../lib/modalSlice';
 
 const Container = styled.div`
   flex: 1;
@@ -36,12 +38,18 @@ export default function VotePage() {
   const [removeVote] = useRemoveVoteMutation();
   const [nominate, { isLoading: isNominating }] = useNominateMutation();
 
+  const dispatch = useDispatch();
   const [steamIdInput, setSteamIdInput] = useState('');
 
   const handleNominate = async () => {
     const id = steamIdInput.trim();
-    await nominate(id || undefined);
-    setSteamIdInput('');
+    const result = await nominate(id || undefined);
+    if ('error' in result) {
+      const message = (result.error as { data?: string }).data ?? '提名失败';
+      dispatch(openModal({ title: '提名失败', content: message }));
+    } else {
+      setSteamIdInput('');
+    }
   };
 
   return (
