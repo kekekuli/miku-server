@@ -116,7 +116,7 @@ export default function ProfilePage({ profile }: Props) {
 					<PrimaryBtn href={profile.profileUrl} target="_blank" rel="noreferrer">
 						查看 Steam 个人资料
 					</PrimaryBtn>
-					<SecondaryBtn href="/">退出登录</SecondaryBtn>
+					<SecondaryBtn href="/auth/logout">退出登录</SecondaryBtn>
 				</Actions>
 			</Card>
 		</Page>

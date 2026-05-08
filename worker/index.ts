@@ -11,6 +11,7 @@ interface Route {
 const routes: Route[] = [
   { method: 'GET', path: '/auth/steam', handler: handleSteamLogin },
   { method: 'GET', path: '/auth/steam/callback', handler: handleSteamCallback },
+  { method: 'GET', path: '/auth/logout', handler: handleLogout },
   { method: 'GET', path: '/api/me', handler: getMe },
 ];
 
@@ -46,8 +47,9 @@ async function handleSteamCallback(request: Request, env: Env): Promise<Response
   if (!isValid) {
     return Response.redirect(origin, 302);
   }
-  const steamId = url.searchParams.get('openid.claimed_id');
-  if (!steamId || !/^\d+$/.test(steamId)) {
+  const claimedId = url.searchParams.get('openid.claimed_id') ?? '';
+  const steamId = claimedId.match(/\/(\d+)$/)?.[1];
+  if (!steamId) {
     throw new Error('Invalid SteamID');
   }
 
@@ -66,6 +68,18 @@ async function handleSteamCallback(request: Request, env: Env): Promise<Response
     //TODO: use something like dialog
     return Response.redirect(origin, 302);
   }
+}
+
+function handleLogout(request: Request): Response {
+  const url = new URL(request.url);
+  const origin = `${url.protocol}//${url.host}`;
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: origin,
+      'Set-Cookie': 'token=; Path=/; Max-Age=0; SameSite=Lax; Secure; HttpOnly',
+    },
+  });
 }
 
 async function getMe(request: Request, env: Env): Promise<Response> {
