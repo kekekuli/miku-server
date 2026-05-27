@@ -1,6 +1,7 @@
 import styled from 'styled-components';
-import { Badge, Button, Flex, Text } from '@radix-ui/themes';
+import { Badge, Button, Flex, Text, Tooltip } from '@radix-ui/themes';
 import { useGetVotesQuery } from '../lib/api';
+import type { GameStatus } from '../../shared/types';
 
 const Card = styled.div`
   background: #2a475e;
@@ -47,9 +48,15 @@ export interface CandidateCardProps {
   voteCount: number;
   isMyVote: boolean;
   isSelf: boolean;
+  profileUrl: string;
+  squad44Status: GameStatus | null;
   onVote: (steamId: string) => void;
   onUnvote: () => void;
   disabled?: boolean;
+}
+
+function formatHours(minutes: number) {
+  return `${Math.floor(minutes / 60)}h`;
 }
 
 export default function CandidateCard({
@@ -59,6 +66,8 @@ export default function CandidateCard({
   voteCount,
   isMyVote,
   isSelf,
+  profileUrl,
+  squad44Status,
   onVote,
   onUnvote,
   disabled,
@@ -66,18 +75,30 @@ export default function CandidateCard({
   const totalVotes = useTotalVotes();
   const percentage = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
 
+  const tooltipContent = squad44Status
+    ? `总游戏时间 ${formatHours(squad44Status.playtime_forever)}${squad44Status.playtime_2weeks != null ? ` · 近两周 ${formatHours(squad44Status.playtime_2weeks)}` : ''}`
+    : '暂无游戏数据';
+
   return (
     <Card>
       <Flex align="center" gap="3">
-        <Avatar src={avatar} alt={name} />
+        <Tooltip content={tooltipContent}>
+          <a href={profileUrl} target="_blank" rel="noreferrer" style={{ flexShrink: 0 }}>
+            <Avatar src={avatar} alt={name} style={{ cursor: 'pointer' }} />
+          </a>
+        </Tooltip>
         <div style={{ flex: 1, minWidth: 0 }}>
           <Flex align="center" gap="2" wrap="wrap">
-            <Text
-              weight="bold"
-              style={{ color: '#c6d4df', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-            >
-              {name}
-            </Text>
+            <Tooltip content={tooltipContent}>
+              <a href={profileUrl} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
+                <Text
+                  weight="bold"
+                  style={{ color: '#c6d4df', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}
+                >
+                  {name}
+                </Text>
+              </a>
+            </Tooltip>
             {isSelf && <Badge color="blue" size="1">你</Badge>}
             {isMyVote && <Badge color="green" size="1">已投票</Badge>}
           </Flex>

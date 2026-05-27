@@ -73,7 +73,7 @@ export default function VotePage() {
       )}
 
       <Grid>
-        {votes?.results.map(({ candidate, voteCount }) => (
+        {votes?.results.map(({ candidate, voteCount, profileUrl, squad44Status }) => (
           <CandidateCard
             key={candidate.steamId}
             steamId={candidate.steamId}
@@ -82,6 +82,8 @@ export default function VotePage() {
             voteCount={voteCount}
             isMyVote={votes.myVote === candidate.steamId}
             isSelf={me?.steamId === candidate.steamId}
+            profileUrl={profileUrl}
+            squad44Status={squad44Status}
             onVote={id => { void castVote(id); }}
             onUnvote={() => { void removeVote(); }}
           />

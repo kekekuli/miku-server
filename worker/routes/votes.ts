@@ -4,7 +4,9 @@ import { count, eq } from 'drizzle-orm';
 import { candidates, votes } from '../../db/schema';
 import { parseCookie, verifyJWT } from '../lib/jwt';
 import { requireAuth } from './auth';
+import { getSteamProfile } from '../lib/steam';
 import type { Variables } from '../types';
+import type { GameStatus } from '../../shared/types';
 
 const votesRoute = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -28,10 +30,21 @@ votesRoute.get('/', async c => {
     : null;
 
   const countMap = Object.fromEntries(voteCounts.map(v => [v.candidateId, v.count]));
-  const results = allCandidates
-    .map(candidate => ({ candidate, voteCount: countMap[candidate.steamId] ?? 0 }))
-    .sort((a, b) => b.voteCount - a.voteCount);
 
+  const results = await Promise.all(
+    allCandidates.map(async candidate => {
+      let profileUrl = `https://steamcommunity.com/profiles/${candidate.steamId}`;
+      let squad44Status: GameStatus | null = null;
+      try {
+        const profile = await getSteamProfile(candidate.steamId, c.env);
+        profileUrl = profile.profileUrl;
+        squad44Status = profile.squad44Status;
+      } catch { /* use defaults if profile fetch fails */ }
+      return { candidate, voteCount: countMap[candidate.steamId] ?? 0, profileUrl, squad44Status };
+    })
+  );
+
+  results.sort((a, b) => b.voteCount - a.voteCount);
   return c.json({ results, myVote: myVoteRow?.candidateId ?? null });
 });
 

@@ -22,6 +22,8 @@ export type Vote = InferSelectModel<typeof votes>;
 export interface VoteResult {
   candidate: VoteCandidate;
   voteCount: number;
+  profileUrl: string;
+  squad44Status: GameStatus | null;
 }
 
 export interface VotesResponse {
