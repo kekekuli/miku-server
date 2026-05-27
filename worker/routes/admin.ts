@@ -1,0 +1,82 @@
+import { Hono } from 'hono';
+import { createMiddleware } from 'hono/factory';
+import { drizzle } from 'drizzle-orm/d1';
+import { eq } from 'drizzle-orm';
+import { candidates, votes } from '../../db/schema';
+import { parseCookie, verifyJWT } from '../lib/jwt';
+import { getAdminPermissions } from '../lib/strapi';
+import { sendRconCommand } from '../lib/rcon';
+import type { AdminVariables } from '../types';
+
+type AdminEnv = { Bindings: Env; Variables: AdminVariables };
+
+const requireAdmin = createMiddleware<AdminEnv>(async (c, next) => {
+  const token = parseCookie(c.req.header('Cookie') ?? '')['token'];
+  if (!token) return c.json({ error: 'Unauthorized' }, 401);
+
+  const payload = await verifyJWT(token, c.env.JWT_SECRET);
+  if (!payload) return c.json({ error: 'Unauthorized' }, 401);
+
+  const permissions = await getAdminPermissions(payload.steamid, c.env);
+  if (!permissions) return c.json({ error: 'Forbidden' }, 403);
+
+  c.set('steamid', payload.steamid);
+  c.set('adminPermissions', permissions);
+  await next();
+});
+
+const requirePermission = (perm: string) =>
+  createMiddleware<AdminEnv>(async (c, next) => {
+    if (!(perm in c.get('adminPermissions'))) return c.json({ error: 'Forbidden' }, 403);
+    await next();
+  });
+
+const admin = new Hono<AdminEnv>();
+
+admin.use('*', requireAdmin);
+
+admin.get('/me', c => {
+  const features: Record<string, true> = {};
+  if (c.env.RCON_HOST && c.env.RCON_PORT && c.env.RCON_PASSWORD) features.rcon = true;
+  if (c.env.OPENOBSERVE_URL && c.env.OPENOBSERVE_TOKEN) features.openobserve = true;
+  return c.json({ permissions: c.get('adminPermissions'), features });
+});
+
+admin.post('/rcon', requirePermission('canRcon'), async c => {
+  if (!c.env.RCON_HOST || !c.env.RCON_PORT || !c.env.RCON_PASSWORD) {
+    return c.json({ error: 'RCON is not configured' }, 503);
+  }
+
+  const { command }: { command?: string } = await c.req.json();
+  if (!command?.trim()) return c.json({ error: 'Command is required' }, 400);
+  if (command.length > 512) return c.json({ error: 'Command too long (max 512 chars)' }, 400);
+
+  try {
+    const output = await sendRconCommand(
+      c.env.RCON_HOST,
+      Number(c.env.RCON_PORT),
+      c.env.RCON_PASSWORD,
+      command.trim(),
+    );
+    return c.json({ output });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'RCON command failed';
+    return c.json({ error: message }, 500);
+  }
+});
+
+admin.delete('/votes/reset', requirePermission('canManageVotes'), async c => {
+  const db = drizzle(c.env.DB);
+  await db.delete(votes);
+  return c.body(null, 204);
+});
+
+admin.delete('/candidates/:steamId', requirePermission('canManageCandidates'), async c => {
+  const steamId = c.req.param('steamId');
+  const db = drizzle(c.env.DB);
+  await db.delete(votes).where(eq(votes.candidateId, steamId));
+  await db.delete(candidates).where(eq(candidates.steamId, steamId));
+  return c.body(null, 204);
+});
+
+export default admin;

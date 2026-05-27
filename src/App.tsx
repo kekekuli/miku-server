@@ -4,6 +4,7 @@ import Header from './components/Header';
 import LoginPage from './pages/login';
 import ProfilePage from './pages/profile';
 import VotePage from './pages/vote';
+import AdminPage from './pages/admin';
 import ModalProvider from './components/ModalProvider';
 import { useGetMeQuery } from './lib/api';
 
@@ -21,6 +22,7 @@ export default function App() {
           <>
             <Route path="/" element={<ProfilePage />} />
             <Route path="/vote" element={<VotePage />} />
+            <Route path="/admin" element={<AdminPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </>
         ) : (

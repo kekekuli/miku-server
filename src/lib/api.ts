@@ -1,10 +1,10 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import type { SteamProfile, VotesResponse } from '../../shared/types';
+import type { SteamProfile, VotesResponse, AdminMe } from '../../shared/types';
 
 export const api = createApi({
   reducerPath: 'api',
   baseQuery: fetchBaseQuery({ baseUrl: '/' }),
-  tagTypes: ['Votes'],
+  tagTypes: ['Votes', 'AdminMe'],
   endpoints: builder => ({
     getMe: builder.query<SteamProfile, void>({
       query: () => 'api/me',
@@ -33,6 +33,25 @@ export const api = createApi({
       }),
       invalidatesTags: ['Votes'],
     }),
+    getAdminMe: builder.query<AdminMe, void>({
+      query: () => 'admin/me',
+      providesTags: ['AdminMe'],
+    }),
+    sendRcon: builder.mutation<{ output: string }, string>({
+      query: command => ({
+        url: 'admin/rcon',
+        method: 'POST',
+        body: { command },
+      }),
+    }),
+    resetVotes: builder.mutation<void, void>({
+      query: () => ({ url: 'admin/votes/reset', method: 'DELETE' }),
+      invalidatesTags: ['Votes'],
+    }),
+    deleteCandidate: builder.mutation<void, string>({
+      query: steamId => ({ url: `admin/candidates/${steamId}`, method: 'DELETE' }),
+      invalidatesTags: ['Votes'],
+    }),
   }),
 });
 
@@ -42,4 +61,8 @@ export const {
   useCastVoteMutation,
   useRemoveVoteMutation,
   useNominateMutation,
+  useGetAdminMeQuery,
+  useSendRconMutation,
+  useResetVotesMutation,
+  useDeleteCandidateMutation,
 } = api;

@@ -18,7 +18,7 @@ export default tseslint.config(
     extends: [tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       parserOptions: {
-        projectService: true,
+        project: './tsconfig.worker.json',
         tsconfigRootDir: import.meta.dirname,
       },
     },

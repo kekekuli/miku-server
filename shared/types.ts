@@ -29,3 +29,8 @@ export interface VotesResponse {
   myVote: string | null;
 }
 
+export interface AdminMe {
+  permissions: Record<string, true>;
+  features: Record<string, true>;
+}
+
