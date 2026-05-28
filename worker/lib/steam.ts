@@ -41,9 +41,13 @@ async function fetchGamesHours(steamId: string, apiKey: string, games: { appid: 
     const url = `https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key=${apiKey}&format=json&input_json=${input}`;
 
     const response = await fetch(url);
-    if (!response.ok) return games.map(() => null);
+    if (!response.ok) {
+      console.error(`fetchGamesHours ${steamId}: HTTP ${response.status}`, await response.text());
+      return games.map(() => null);
+    }
 
     const data: { response: { games?: GameStatus[] } } = await response.json();
+    console.log(`fetchGamesHours ${steamId}: games=${JSON.stringify(data.response.games)}`);
     const fetched = data.response.games ?? [];
 
     return games.map(g => fetched.find(r => r.appid === g.appid) ?? null);
