@@ -1,12 +1,12 @@
-PRAGMA foreign_keys=OFF;--> statement-breakpoint
-CREATE TABLE `__new_candidates` (
-	`steam_id` text PRIMARY KEY NOT NULL,
-	`name` text NOT NULL,
-	`avatar` text NOT NULL,
-	`nominated_by` text NOT NULL
-);
---> statement-breakpoint
-INSERT INTO `__new_candidates`("steam_id", "name", "avatar", "nominated_by") SELECT "steam_id", "name", "avatar", "nominated_by" FROM `candidates`;--> statement-breakpoint
-DROP TABLE `candidates`;--> statement-breakpoint
-ALTER TABLE `__new_candidates` RENAME TO `candidates`;--> statement-breakpoint
-PRAGMA foreign_keys=ON;
+CREATE TABLE `__new_votes` (`voter_id` text PRIMARY KEY NOT NULL, `candidate_id` text NOT NULL);
+INSERT INTO `__new_votes` SELECT * FROM `votes`;
+DROP TABLE `votes`;
+ALTER TABLE `__new_votes` RENAME TO `votes`;
+CREATE TABLE `__new_candidates` (`steam_id` text PRIMARY KEY NOT NULL, `name` text NOT NULL, `avatar` text NOT NULL, `nominated_by` text NOT NULL);
+INSERT INTO `__new_candidates` SELECT * FROM `candidates`;
+DROP TABLE `candidates`;
+ALTER TABLE `__new_candidates` RENAME TO `candidates`;
+CREATE TABLE `__new_votes` (`voter_id` text PRIMARY KEY NOT NULL, `candidate_id` text NOT NULL, FOREIGN KEY (`candidate_id`) REFERENCES `candidates`(`steam_id`) ON UPDATE no action ON DELETE no action);
+INSERT INTO `__new_votes` SELECT * FROM `votes`;
+DROP TABLE `votes`;
+ALTER TABLE `__new_votes` RENAME TO `votes`;
