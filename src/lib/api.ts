@@ -1,5 +1,5 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import type { SteamProfile, VotesResponse, AdminMe } from '../../shared/types';
+import type { SteamProfile, VotesResponse, AdminMe, VoterInfo } from '../../shared/types';
 
 export const api = createApi({
   reducerPath: 'api',
@@ -33,6 +33,10 @@ export const api = createApi({
       }),
       invalidatesTags: ['Votes'],
     }),
+    getVoters: builder.query<VoterInfo[], string>({
+      query: candidateId => `api/votes/${candidateId}/voters`,
+      providesTags: ['Votes'],
+    }),
     getAdminMe: builder.query<AdminMe, void>({
       query: () => 'admin/me',
       providesTags: ['AdminMe'],
@@ -61,6 +65,7 @@ export const {
   useCastVoteMutation,
   useRemoveVoteMutation,
   useNominateMutation,
+  useGetVotersQuery,
   useGetAdminMeQuery,
   useSendRconMutation,
   useResetVotesMutation,

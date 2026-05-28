@@ -10,7 +10,9 @@ import {
   useNominateMutation,
 } from '../../lib/api';
 import CandidateCard from '../../components/CandidateCard';
+import VotersModal from '../../components/VotersModal';
 import { openModal } from '../../lib/modalSlice';
+import type { VoterInfo } from '../../../shared/types';
 
 const Container = styled.div`
   flex: 1;
@@ -40,6 +42,7 @@ export default function VotePage() {
 
   const dispatch = useDispatch();
   const [steamIdInput, setSteamIdInput] = useState('');
+  const [selectedCandidate, setSelectedCandidate] = useState<{ steamId: string; name: string; nominatedByProfile: VoterInfo } | null>(null);
 
   const handleNominate = async () => {
     const id = steamIdInput.trim();
@@ -53,6 +56,7 @@ export default function VotePage() {
   };
 
   return (
+    <>
     <Container>
       <form onSubmit={e => { e.preventDefault(); void handleNominate(); }}>
         <Flex gap="2" align="center">
@@ -73,7 +77,7 @@ export default function VotePage() {
       )}
 
       <Grid>
-        {votes?.results.map(({ candidate, voteCount, profileUrl, squad44Status }) => (
+        {votes?.results.map(({ candidate, voteCount, profileUrl, squad44Status, nominatedByProfile }) => (
           <CandidateCard
             key={candidate.steamId}
             steamId={candidate.steamId}
@@ -86,9 +90,18 @@ export default function VotePage() {
             squad44Status={squad44Status}
             onVote={id => { void castVote(id); }}
             onUnvote={() => { void removeVote(); }}
+            onCardClick={() => setSelectedCandidate({ steamId: candidate.steamId, name: candidate.name, nominatedByProfile })}
           />
         ))}
       </Grid>
     </Container>
+
+    <VotersModal
+      candidateId={selectedCandidate?.steamId ?? null}
+      candidateName={selectedCandidate?.name ?? ''}
+      nominatedByProfile={selectedCandidate?.nominatedByProfile ?? null}
+      onClose={() => setSelectedCandidate(null)}
+    />
+    </>
   );
 }

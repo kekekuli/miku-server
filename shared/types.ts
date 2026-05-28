@@ -19,11 +19,19 @@ export interface SteamProfile {
 export type VoteCandidate = InferSelectModel<typeof candidates>;
 export type Vote = InferSelectModel<typeof votes>;
 
+export interface VoterInfo {
+  steamId: string;
+  name: string;
+  avatar: string;
+  profileUrl: string;
+}
+
 export interface VoteResult {
   candidate: VoteCandidate;
   voteCount: number;
   profileUrl: string;
   squad44Status: GameStatus | null;
+  nominatedByProfile: VoterInfo;
 }
 
 export interface VotesResponse {

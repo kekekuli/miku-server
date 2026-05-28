@@ -52,6 +52,7 @@ export interface CandidateCardProps {
   squad44Status: GameStatus | null;
   onVote: (steamId: string) => void;
   onUnvote: () => void;
+  onCardClick?: () => void;
   disabled?: boolean;
 }
 
@@ -70,6 +71,7 @@ export default function CandidateCard({
   squad44Status,
   onVote,
   onUnvote,
+  onCardClick,
   disabled,
 }: CandidateCardProps) {
   const totalVotes = useTotalVotes();
@@ -89,20 +91,23 @@ export default function CandidateCard({
         </Tooltip>
         <div style={{ flex: 1, minWidth: 0 }}>
           <Flex align="center" gap="2" wrap="wrap">
-            <Tooltip content={tooltipContent}>
-              <a href={profileUrl} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
-                <Text
-                  weight="bold"
-                  style={{ color: '#c6d4df', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}
-                >
-                  {name}
-                </Text>
-              </a>
-            </Tooltip>
+            <Text
+              weight="bold"
+              style={{ color: '#c6d4df', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >
+              {name}
+            </Text>
             {isSelf && <Badge color="blue" size="1">你</Badge>}
             {isMyVote && <Badge color="green" size="1">已投票</Badge>}
           </Flex>
-          <Text size="1" color="gray">{voteCount} 票 · {percentage}%</Text>
+          <Text
+            size="1"
+            color="gray"
+            style={onCardClick ? { cursor: 'pointer', textDecoration: 'underline dotted' } : undefined}
+            onClick={onCardClick}
+          >
+            {voteCount} 票 · {percentage}%
+          </Text>
           <BarTrack>
             <BarFill $pct={percentage} />
           </BarTrack>

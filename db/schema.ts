@@ -4,6 +4,7 @@ export const candidates = sqliteTable('candidates', {
   steamId: text('steam_id').primaryKey(),
   name: text('name').notNull(),
   avatar: text('avatar').notNull(),
+  nominatedBy: text('nominated_by').notNull(),
 });
 
 export const votes = sqliteTable('votes', {

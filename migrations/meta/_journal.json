@@ -8,6 +8,27 @@
       "when": 1778225231131,
       "tag": "0000_init_votes",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1779956711813,
+      "tag": "0001_add_nominated_by_nullable",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1779956800000,
+      "tag": "0002_backfill_nominated_by",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1779956881746,
+      "tag": "0003_make_nominated_by_not_null",
+      "breakpoints": true
     }
   ]
 }

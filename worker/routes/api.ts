@@ -27,7 +27,7 @@ api.post('/candidates', requireAuth, async c => {
   const existing = await db.select().from(candidates).where(eq(candidates.steamId, profile.steamId)).get();
 
   await db.insert(candidates)
-    .values({ steamId: profile.steamId, name: profile.name, avatar: profile.avatar })
+    .values({ steamId: profile.steamId, name: profile.name, avatar: profile.avatar, nominatedBy: steamid })
     .onConflictDoUpdate({
       target: candidates.steamId,
       set: { name: profile.name, avatar: profile.avatar },
