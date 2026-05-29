@@ -1,5 +1,5 @@
 import type { InferSelectModel } from 'drizzle-orm';
-import type { candidates, votes } from '../db/schema';
+import type { steamProfiles, candidates } from '../db/schema';
 
 export interface GameStatus {
   appid: number;
@@ -7,31 +7,15 @@ export interface GameStatus {
   playtime_2weeks?: number;
 }
 
-export interface SteamProfile {
-  steamId: string;
-  name: string;
-  avatar: string;
-  profileUrl: string;
-  countryCode: string | null;
+export type SteamProfile = Omit<InferSelectModel<typeof steamProfiles>, 'squad44Status'> & {
   squad44Status: GameStatus | null;
-}
+};
 
 export type VoteCandidate = InferSelectModel<typeof candidates>;
-export type Vote = InferSelectModel<typeof votes>;
-
-export interface VoterInfo {
-  steamId: string;
-  name: string;
-  avatar: string;
-  profileUrl: string;
-}
 
 export interface VoteResult {
-  candidate: VoteCandidate;
+  candidate: VoteCandidate & { profile: SteamProfile; nominatorProfile: SteamProfile };
   voteCount: number;
-  profileUrl: string;
-  squad44Status: GameStatus | null;
-  nominatedByProfile: VoterInfo;
 }
 
 export interface VotesResponse {
@@ -43,4 +27,3 @@ export interface AdminMe {
   permissions: Record<string, true>;
   features: Record<string, true>;
 }
-

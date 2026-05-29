@@ -1,5 +1,5 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import type { SteamProfile, VotesResponse, AdminMe, VoterInfo } from '../../shared/types';
+import type { SteamProfile, VotesResponse, AdminMe, GameStatus } from '../../shared/types';
 
 export const api = createApi({
   reducerPath: 'api',
@@ -33,7 +33,10 @@ export const api = createApi({
       }),
       invalidatesTags: ['Votes'],
     }),
-    getVoters: builder.query<VoterInfo[], string>({
+    getGameStatus: builder.query<GameStatus | null, string>({
+      query: steamId => `api/game-status/${steamId}`,
+    }),
+    getVoters: builder.query<SteamProfile[], string>({
       query: candidateId => `api/votes/${candidateId}/voters`,
       providesTags: ['Votes'],
     }),
@@ -65,6 +68,7 @@ export const {
   useCastVoteMutation,
   useRemoveVoteMutation,
   useNominateMutation,
+  useGetGameStatusQuery,
   useGetVotersQuery,
   useGetAdminMeQuery,
   useSendRconMutation,

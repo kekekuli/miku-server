@@ -1,7 +1,11 @@
 import { Hono } from 'hono';
+import { drizzle } from 'drizzle-orm/d1';
+import { count, desc, eq } from 'drizzle-orm';
 import auth from './routes/auth';
 import api from './routes/api';
 import admin from './routes/admin';
+import { processGameStatusRefreshBatch, enqueueGameStatusRefresh } from './lib/steam';
+import { candidates, votes } from '../db/schema';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -15,4 +19,22 @@ app.all('*', c => {
   return c.env.ASSETS.fetch(target);
 });
 
-export default app;
+export default {
+  fetch: app.fetch,
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    const db = drizzle(env.DB);
+    const rows = await db
+      .select({ steamId: candidates.steamId, voteCount: count(votes.voterId) })
+      .from(candidates)
+      .leftJoin(votes, eq(votes.candidateId, candidates.steamId))
+      .groupBy(candidates.steamId)
+      .orderBy(desc(count(votes.voterId)))
+      .limit(20);
+    await enqueueGameStatusRefresh(rows.map(r => r.steamId), env.GAME_STATUS_QUEUE, env.STEAM_PROFILE_CACHE);
+  },
+  async queue(batch: MessageBatch<{ steamId: string }>, env: Env): Promise<void> {
+    const steamIds = [...new Set(batch.messages.map(m => m.body.steamId))];
+    await processGameStatusRefreshBatch(steamIds, env);
+    batch.ackAll();
+  },
+};

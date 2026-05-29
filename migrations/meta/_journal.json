@@ -29,6 +29,27 @@
       "when": 1779956881746,
       "tag": "0003_make_nominated_by_not_null",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1779972120984,
+      "tag": "0004_add_steam_profiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1779972200000,
+      "tag": "0005_backfill_steam_profiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1779972300000,
+      "tag": "0006_update_candidates",
+      "breakpoints": true
     }
   ]
 }

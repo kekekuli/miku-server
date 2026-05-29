@@ -194,8 +194,8 @@ export default function AdminPage() {
 
           {votes?.results.map(({ candidate, voteCount }) => (
             <CandidateRow key={candidate.steamId}>
-              <Avatar src={candidate.avatar} alt={candidate.name} />
-              <Text style={{ flex: 1, color: '#c6d4df' }} weight="medium">{candidate.name}</Text>
+              <Avatar src={candidate.profile.avatar} alt={candidate.profile.name} />
+              <Text style={{ flex: 1, color: '#c6d4df' }} weight="medium">{candidate.profile.name}</Text>
               <Text size="2" color="gray">{voteCount} 票</Text>
               {permissions.canManageCandidates && (
                 <Button
@@ -204,7 +204,7 @@ export default function AdminPage() {
                   variant="soft"
                   onClick={() => setPending({
                     label: '移除候选人',
-                    description: `将移除候选人 ${candidate.name} 及其所有投票记录，无法撤销。确定继续吗？`,
+                    description: `将移除候选人 ${candidate.profile.name} 及其所有投票记录，无法撤销。确定继续吗？`,
                     run: () => { void deleteCandidate(candidate.steamId); },
                   })}
                 >

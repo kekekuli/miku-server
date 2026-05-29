@@ -37,8 +37,24 @@
       "database_id": "c5c88afc-d273-4c7e-bdf6-e4f3ea8c0532",
       "migrations_dir": "./migrations"
     }
-  ]
-  /**
+  ],
+  "triggers": {
+    "crons": ["0 19 * * *"]
+  },
+  "queues": {
+    "producers": [
+      { "queue": "game-status-refresh", "binding": "GAME_STATUS_QUEUE" }
+    ],
+    "consumers": [
+      {
+        "queue": "game-status-refresh",
+        "max_batch_size": 20,
+        "max_batch_timeout": 30,
+        "max_retries": 2
+      }
+    ]
+  },
+/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
 	 */

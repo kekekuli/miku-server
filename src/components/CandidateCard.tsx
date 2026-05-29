@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import styled from 'styled-components';
 import { Badge, Button, Flex, Text, Tooltip } from '@radix-ui/themes';
-import { useGetVotesQuery } from '../lib/api';
+import { useGetVotesQuery, useGetGameStatusQuery } from '../lib/api';
 import type { GameStatus } from '../../shared/types';
 
 const Card = styled.div`
@@ -77,15 +78,27 @@ export default function CandidateCard({
   const totalVotes = useTotalVotes();
   const percentage = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
 
-  const tooltipContent = squad44Status
-    ? `总游戏时间 ${formatHours(squad44Status.playtime_forever)}${squad44Status.playtime_2weeks != null ? ` · 近两周 ${formatHours(squad44Status.playtime_2weeks)}` : ''}`
-    : '暂无游戏数据';
+  const [hovered, setHovered] = useState(false);
+  const { data: fetchedStatus, isFetching } = useGetGameStatusQuery(steamId, { skip: !hovered });
+  const gameStatus = hovered ? (fetchedStatus ?? squad44Status) : squad44Status;
+
+  const tooltipContent = isFetching
+    ? '查询中…'
+    : gameStatus
+      ? `总游戏时间 ${formatHours(gameStatus.playtime_forever)}${gameStatus.playtime_2weeks != null ? ` · 近两周 ${formatHours(gameStatus.playtime_2weeks)}` : ''}`
+      : '暂无游戏数据';
 
   return (
     <Card>
       <Flex align="center" gap="3">
         <Tooltip content={tooltipContent}>
-          <a href={profileUrl} target="_blank" rel="noreferrer" style={{ flexShrink: 0 }}>
+          <a
+            href={profileUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={{ flexShrink: 0 }}
+            onMouseEnter={() => setHovered(true)}
+          >
             <Avatar src={avatar} alt={name} style={{ cursor: 'pointer' }} />
           </a>
         </Tooltip>

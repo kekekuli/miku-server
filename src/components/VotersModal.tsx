@@ -1,15 +1,15 @@
 import { Dialog, Flex, Text, Spinner, Separator } from '@radix-ui/themes';
 import { useGetVotersQuery } from '../lib/api';
-import type { VoterInfo } from '../../shared/types';
+import type { SteamProfile } from '../../shared/types';
 
 interface Props {
   candidateId: string | null;
   candidateName: string;
-  nominatedByProfile: VoterInfo | null;
+  nominatorProfile: SteamProfile | null;
   onClose: () => void;
 }
 
-function VoterRow({ voter }: { voter: VoterInfo }) {
+function VoterRow({ voter }: { voter: SteamProfile }) {
   return (
     <Flex align="center" gap="2">
       {voter.avatar && (
@@ -31,7 +31,7 @@ function VoterRow({ voter }: { voter: VoterInfo }) {
   );
 }
 
-export default function VotersModal({ candidateId, candidateName, nominatedByProfile, onClose }: Props) {
+export default function VotersModal({ candidateId, candidateName, nominatorProfile, onClose }: Props) {
   const { data: voters, isLoading } = useGetVotersQuery(candidateId ?? '', { skip: !candidateId });
 
   return (
@@ -39,10 +39,10 @@ export default function VotersModal({ candidateId, candidateName, nominatedByPro
       <Dialog.Content maxWidth="400px">
         <Dialog.Title>关于 {candidateName}</Dialog.Title>
 
-        {nominatedByProfile && (
+        {nominatorProfile && (
           <Flex direction="column" gap="1" mb="3">
             <Text size="1" color="gray" weight="bold">提名人</Text>
-            <VoterRow voter={nominatedByProfile} />
+            <VoterRow voter={nominatorProfile} />
           </Flex>
         )}
 
@@ -57,7 +57,7 @@ export default function VotersModal({ candidateId, candidateName, nominatedByPro
         )}
 
         {!isLoading && voters?.length === 0 && (
-          <Text color="gray" size="2" mt="2" style={{ display: "block" }}>暂无投票</Text>
+          <Text color="gray" size="2" mt="2" style={{ display: 'block' }}>暂无投票</Text>
         )}
 
         {!isLoading && voters && voters.length > 0 && (

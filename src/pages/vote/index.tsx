@@ -12,7 +12,7 @@ import {
 import CandidateCard from '../../components/CandidateCard';
 import VotersModal from '../../components/VotersModal';
 import { openModal } from '../../lib/modalSlice';
-import type { VoterInfo } from '../../../shared/types';
+import type { SteamProfile } from '../../../shared/types';
 
 const Container = styled.div`
   flex: 1;
@@ -42,7 +42,7 @@ export default function VotePage() {
 
   const dispatch = useDispatch();
   const [steamIdInput, setSteamIdInput] = useState('');
-  const [selectedCandidate, setSelectedCandidate] = useState<{ steamId: string; name: string; nominatedByProfile: VoterInfo } | null>(null);
+  const [selectedCandidate, setSelectedCandidate] = useState<{ steamId: string; name: string; nominatorProfile: SteamProfile } | null>(null);
 
   const handleNominate = async () => {
     const id = steamIdInput.trim();
@@ -77,20 +77,20 @@ export default function VotePage() {
       )}
 
       <Grid>
-        {votes?.results.map(({ candidate, voteCount, profileUrl, squad44Status, nominatedByProfile }) => (
+        {votes?.results.map(({ candidate, voteCount }) => (
           <CandidateCard
             key={candidate.steamId}
             steamId={candidate.steamId}
-            name={candidate.name}
-            avatar={candidate.avatar}
+            name={candidate.profile.name}
+            avatar={candidate.profile.avatar}
             voteCount={voteCount}
             isMyVote={votes.myVote === candidate.steamId}
             isSelf={me?.steamId === candidate.steamId}
-            profileUrl={profileUrl}
-            squad44Status={squad44Status}
+            profileUrl={candidate.profile.profileUrl}
+            squad44Status={candidate.profile.squad44Status}
             onVote={id => { void castVote(id); }}
             onUnvote={() => { void removeVote(); }}
-            onCardClick={() => setSelectedCandidate({ steamId: candidate.steamId, name: candidate.name, nominatedByProfile })}
+            onCardClick={() => setSelectedCandidate({ steamId: candidate.steamId, name: candidate.profile.name, nominatorProfile: candidate.nominatorProfile })}
           />
         ))}
       </Grid>
@@ -99,7 +99,7 @@ export default function VotePage() {
     <VotersModal
       candidateId={selectedCandidate?.steamId ?? null}
       candidateName={selectedCandidate?.name ?? ''}
-      nominatedByProfile={selectedCandidate?.nominatedByProfile ?? null}
+      nominatorProfile={selectedCandidate?.nominatorProfile ?? null}
       onClose={() => setSelectedCandidate(null)}
     />
     </>
