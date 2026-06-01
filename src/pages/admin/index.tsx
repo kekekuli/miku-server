@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import styled from 'styled-components';
-import { AlertDialog, Badge, Button, Flex, Text, TextField } from '@radix-ui/themes';
+import { AlertDialog, Badge, Button, Checkbox, Flex, Text, TextField } from '@radix-ui/themes';
 import {
   useGetAdminMeQuery,
   useGetVotesQuery,
@@ -12,17 +12,48 @@ import {
 } from '../../lib/api';
 import { openModal } from '../../lib/modalSlice';
 
-const Container = styled.div`
+const AdminLayout = styled.div`
   flex: 1;
-  background: #1b2838;
-  padding: 2rem;
   display: flex;
-  flex-direction: column;
-  gap: 2rem;
   max-width: 1200px;
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
+  padding: 2rem;
+  gap: 1.5rem;
+`;
+
+const Sidebar = styled.div`
+  width: 200px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+`;
+
+const SidebarItem = styled.button<{ $active?: boolean }>`
+  background: ${p => (p.$active ? '#2a475e' : 'transparent')};
+  border: none;
+  border-radius: 6px;
+  color: ${p => (p.$active ? '#66c0f4' : '#c6d4df')};
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: ${p => (p.$active ? 'bold' : 'normal')};
+  padding: 0.6rem 0.9rem;
+  text-align: left;
+  width: 100%;
+  &:hover {
+    background: #2a475e;
+    color: #66c0f4;
+  }
+`;
+
+const PageBody = styled.div`
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
 `;
 
 const Section = styled.div`
@@ -100,6 +131,8 @@ export default function AdminPage() {
   const [log, setLog] = useState<LogLine[]>([]);
   const terminalRef = useRef<HTMLDivElement>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(new Set());
 
   const [sendRcon, { isLoading: rconLoading }] = useSendRconMutation();
   const [resetVotes, { isLoading: resetting }] = useResetVotesMutation();
@@ -111,6 +144,15 @@ export default function AdminPage() {
   }
 
   const { permissions, features } = data;
+
+  const toggleCandidate = (steamId: string) => {
+    setSelectedCandidates(prev => {
+      const next = new Set(prev);
+      if (next.has(steamId)) next.delete(steamId);
+      else next.add(steamId);
+      return next;
+    });
+  };
 
   const handleRcon = async () => {
     if (!features.rcon) {
@@ -129,15 +171,19 @@ export default function AdminPage() {
     setTimeout(() => terminalRef.current?.scrollTo({ top: 99999, behavior: 'smooth' }), 50);
   };
 
-  return (
-    <Container>
-      {permissions.canRcon && (
+  type Utility = { key: string; label: string; panel: React.ReactNode };
+  const utilities: Utility[] = [];
+
+  if (permissions.canRcon) {
+    utilities.push({
+      key: 'rcon',
+      label: 'RCON 终端',
+      panel: (
         <Section>
           <Flex justify="between" align="center">
             <SectionTitle>RCON 终端</SectionTitle>
             {!features.rcon && <Badge color="red">未配置</Badge>}
           </Flex>
-
           <Terminal ref={terminalRef}>
             {log.length === 0 && (
               <Text size="1" color="gray">输入命令并按回车发送...</Text>
@@ -149,7 +195,6 @@ export default function AdminPage() {
               </div>
             ))}
           </Terminal>
-
           <form onSubmit={e => { e.preventDefault(); void handleRcon(); }}>
             <Flex gap="2">
               <TextField.Root
@@ -165,35 +210,76 @@ export default function AdminPage() {
             </Flex>
           </form>
         </Section>
-      )}
+      ),
+    });
+  }
 
-      {(permissions.canManageVotes || permissions.canManageCandidates) && (
+  if (permissions.canManageVotes || permissions.canManageCandidates) {
+    utilities.push({
+      key: 'votes',
+      label: '投票管理',
+      panel: (
         <Section>
           <Flex justify="between" align="center">
             <SectionTitle>投票管理</SectionTitle>
-            {permissions.canManageVotes && (
-              <Button
-                color="red"
-                variant="soft"
-                size="2"
-                disabled={resetting}
-                onClick={() => setPending({
-                  label: '重置所有投票',
-                  description: '此操作将清除所有投票记录，无法撤销。确定继续吗？',
-                  run: () => { void resetVotes(); },
-                })}
-              >
-                重置所有投票
-              </Button>
-            )}
+            <Flex gap="2">
+              {permissions.canManageCandidates && selectedCandidates.size > 0 && (
+                <Button
+                  color="red"
+                  variant="soft"
+                  size="2"
+                  onClick={() => setPending({
+                    label: '删除所选候选人',
+                    description: `将移除 ${selectedCandidates.size} 位候选人及其所有投票记录，无法撤销。确定继续吗？`,
+                    run: () => {
+                      selectedCandidates.forEach(id => { void deleteCandidate(id); });
+                      setSelectedCandidates(new Set());
+                    },
+                  })}
+                >
+                  删除所选 ({selectedCandidates.size})
+                </Button>
+              )}
+              {permissions.canManageVotes && (
+                <Button
+                  color="red"
+                  variant="soft"
+                  size="2"
+                  disabled={resetting}
+                  onClick={() => setPending({
+                    label: '重置所有投票',
+                    description: '此操作将清除所有投票记录，无法撤销。确定继续吗？',
+                    run: () => { void resetVotes(); },
+                  })}
+                >
+                  重置所有投票
+                </Button>
+              )}
+            </Flex>
           </Flex>
-
           {!votes?.results.length && (
             <Text size="2" color="gray">暂无候选人。</Text>
           )}
-
+          {permissions.canManageCandidates && selectedCandidates.size > 0 && !!votes?.results.length && (
+            <CandidateRow>
+              <Checkbox
+                checked={selectedCandidates.size === votes.results.length ? true : 'indeterminate'}
+                onCheckedChange={checked => {
+                  if (checked) setSelectedCandidates(new Set(votes.results.map(r => r.candidate.steamId)));
+                  else setSelectedCandidates(new Set());
+                }}
+              />
+              <Text size="2" color="gray">全选 ({votes.results.length})</Text>
+            </CandidateRow>
+          )}
           {votes?.results.map(({ candidate, voteCount }) => (
             <CandidateRow key={candidate.steamId}>
+              {permissions.canManageCandidates && (
+                <Checkbox
+                  checked={selectedCandidates.has(candidate.steamId)}
+                  onCheckedChange={() => toggleCandidate(candidate.steamId)}
+                />
+              )}
               <Avatar src={candidate.profile.avatar} alt={candidate.profile.name} />
               <Text style={{ flex: 1, color: '#c6d4df' }} weight="medium">{candidate.profile.name}</Text>
               <Text size="2" color="gray">{voteCount} 票</Text>
@@ -214,7 +300,30 @@ export default function AdminPage() {
             </CandidateRow>
           ))}
         </Section>
-      )}
+      ),
+    });
+  }
+
+  const activeKey = selectedKey ?? utilities[0]?.key ?? null;
+  const activePanel = utilities.find(u => u.key === activeKey)?.panel ?? null;
+
+  return (
+    <AdminLayout>
+      <Sidebar>
+        {utilities.map(u => (
+          <SidebarItem
+            key={u.key}
+            $active={u.key === activeKey}
+            onClick={() => setSelectedKey(u.key)}
+          >
+            {u.label}
+          </SidebarItem>
+        ))}
+      </Sidebar>
+
+      <PageBody>
+        {activePanel}
+      </PageBody>
 
       <AlertDialog.Root open={!!pending} onOpenChange={v => { if (!v) setPending(null); }}>
         <AlertDialog.Content>
@@ -235,6 +344,6 @@ export default function AdminPage() {
           </Flex>
         </AlertDialog.Content>
       </AlertDialog.Root>
-    </Container>
+    </AdminLayout>
   );
 }
