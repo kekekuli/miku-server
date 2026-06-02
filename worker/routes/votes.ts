@@ -4,7 +4,7 @@ import { count, eq } from 'drizzle-orm';
 import { candidates, votes } from '../../db/schema';
 import { parseCookie, verifyJWT } from '../lib/jwt';
 import { requireAuth } from './auth';
-import { getLazySteamProfiles } from '../lib/steam';
+import { getSteamProfiles } from '../lib/steam';
 import type { Variables } from '../types';
 
 const votesRoute = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -25,8 +25,8 @@ votesRoute.get('/', async c => {
   ]);
 
   const steamIds = [...new Set(allCandidates.flatMap(c => [c.steamId, c.nominatedBy]))];
-  const lazyProfiles = await getLazySteamProfiles(steamIds, c.env, 10);
-  const profileMap = Object.fromEntries(lazyProfiles.map(({ profile: p }) => [p.steamId, p]));
+  const profiles = await getSteamProfiles(steamIds, c.env);
+  const profileMap = Object.fromEntries(profiles.map(p => [p.steamId, p]));
   const countMap = Object.fromEntries(voteCounts.map(v => [v.candidateId, v.count]));
 
   const results = allCandidates.map(candidate => ({
@@ -53,8 +53,8 @@ votesRoute.get('/:candidateId/voters', async c => {
   const voterIds = voterRows.map(r => r.voterId);
   if (voterIds.length === 0) return c.json([]);
 
-  const lazyProfiles = await getLazySteamProfiles(voterIds, c.env, 5);
-  const profileMap = Object.fromEntries(lazyProfiles.map(({ profile: p }) => [p.steamId, p]));
+  const profiles = await getSteamProfiles(voterIds, c.env);
+  const profileMap = Object.fromEntries(profiles.map(p => [p.steamId, p]));
 
   return c.json(voterIds.map(steamId => {
     const p = profileMap[steamId];

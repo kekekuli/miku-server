@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import { parseCookie, verifyJWT, issueJWT } from '../lib/jwt';
-import { getSteamProfile } from '../lib/steam';
+import { getSteamProfiles } from '../lib/steam';
 import type { Variables } from '../types';
 
 const STEAM_OPENID_URL = 'https://steamcommunity.com/openid/login';
@@ -45,7 +45,8 @@ auth.get('/steam/callback', async c => {
   if (!steamId) return c.redirect(origin, 302);
 
   try {
-    const profile = await getSteamProfile(steamId, c.env);
+    const [profile] = await getSteamProfiles([steamId], c.env);
+    if (!profile) throw new Error('Steam profile not found');
     const token = await issueJWT(profile, c.env.JWT_SECRET, c.env.JWT_EXPIRES_IN);
     return new Response(null, {
       status: 302,
