@@ -4,7 +4,7 @@ import { count, desc, eq } from 'drizzle-orm';
 import auth from './routes/auth';
 import api from './routes/api';
 import admin from './routes/admin';
-import { executeGameStatusRefresh, getGameStatusesQueued } from './lib/steam';
+import { executeGameStatusRefresh, getGameStatusQueued } from './lib/steam';
 import { candidates, votes } from '../db/schema';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -30,7 +30,7 @@ export default {
       .groupBy(candidates.steamId)
       .orderBy(desc(count(votes.voterId)))
       .limit(20);
-    await getGameStatusesQueued(rows.map(r => r.steamId), env);
+    await getGameStatusQueued(rows.map(r => r.steamId), env);
   },
   async queue(batch: MessageBatch<{ steamId: string }>, env: Env): Promise<void> {
     const steamIds = [...new Set(batch.messages.map(m => m.body.steamId))];

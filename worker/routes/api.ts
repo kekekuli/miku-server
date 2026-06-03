@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq } from 'drizzle-orm';
 import { candidates } from '../../db/schema';
-import { getSteamProfiles, getGameStatusesNow } from '../lib/steam';
+import { getSteamProfiles, getGameStatusNow, getGameStatusQueued } from '../lib/steam';
 import { getFilterConditions } from '../lib/strapi';
 import { evaluate } from '../lib/evaluate';
 import type { EvalContext } from '../lib/evaluate';
@@ -18,7 +18,7 @@ api.get('/me', requireAuth, async c => {
   const [profile] = await getSteamProfiles([steamid], c.env);
   if (!profile) return c.json(null, 404);
   if (!profile.squad44Status) {
-    const statuses = await getGameStatusesNow([steamid], c.env);
+    const statuses = await getGameStatusNow([steamid], c.env);
     profile.squad44Status = statuses[steamid];
   }
   return c.json(profile);
@@ -28,7 +28,7 @@ api.get('/game-status/:steamId', async c => {
   const { steamId } = c.req.param();
   const [profile] = await getSteamProfiles([steamId], c.env);
   if (!profile) return c.json(null, 404);
-  const statuses = await getGameStatusesNow([steamId], c.env);
+  const statuses = await getGameStatusNow([steamId], c.env);
   return c.json(statuses[steamId] ?? null);
 });
 
@@ -45,7 +45,7 @@ api.post('/eligibility', async c => {
 
   const [allConditions, statusMap] = await Promise.all([
     getFilterConditions(c.env),
-    getGameStatusesNow(steamIds, c.env),
+    getGameStatusQueued(steamIds, c.env),
   ]);
   const conditionMap = new Map(allConditions.map(c => [c.key, c]));
 

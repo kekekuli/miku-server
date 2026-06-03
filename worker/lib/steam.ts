@@ -163,7 +163,7 @@ async function scheduleGameStatusRefresh(steamIds: string[], env: Env): Promise<
   const locks = await Promise.all(unique.map(id => env.STEAM_PROFILE_CACHE.get(`refreshing:${id}`)));
   const toEnqueue = unique.filter((_, i) => locks[i] === null);
   if (toEnqueue.length === 0) return;
-  await Promise.all(toEnqueue.map(id => env.STEAM_PROFILE_CACHE.put(`refreshing:${id}`, '1', { expirationTtl: 600 })));
+  await Promise.all(toEnqueue.map(id => env.STEAM_PROFILE_CACHE.put(`refreshing:${id}`, '1', { expirationTtl: 60 })));
   for (const batch of chunk(toEnqueue, 100)) {
     await env.GAME_STATUS_QUEUE.sendBatch(batch.map(steamId => ({ body: { steamId } })));
   }
@@ -185,7 +185,7 @@ export async function getSteamProfiles(steamIds: string[], env: Env): Promise<St
   return steamIds.flatMap(id => { const p = profileMap.get(id); return p ? [p] : []; });
 }
 
-export async function getGameStatusesNow(steamIds: string[], env: Env): Promise<Record<string, GameStatus | null>> {
+export async function getGameStatusNow(steamIds: string[], env: Env): Promise<Record<string, GameStatus | null>> {
   const profiles = await getSteamProfiles(steamIds, env);
   const result: Record<string, GameStatus | null> = {};
   const needsFetch: string[] = [];
@@ -211,7 +211,7 @@ export async function getGameStatusesNow(steamIds: string[], env: Env): Promise<
   return result;
 }
 
-export async function getGameStatusesQueued(steamIds: string[], env: Env): Promise<Record<string, GameStatus | null>> {
+export async function getGameStatusQueued(steamIds: string[], env: Env): Promise<Record<string, GameStatus | null>> {
   const profiles = await getSteamProfiles(steamIds, env);
   const result: Record<string, GameStatus | null> = {};
   const needsRefresh: string[] = [];
