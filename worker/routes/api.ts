@@ -3,6 +3,10 @@ import { drizzle } from 'drizzle-orm/d1';
 import { eq } from 'drizzle-orm';
 import { candidates } from '../../db/schema';
 import { getSteamProfiles, getGameStatusesNow } from '../lib/steam';
+import { getFilterConditions } from '../lib/strapi';
+import { evaluate } from '../lib/evaluate';
+import type { EvalContext } from '../lib/evaluate';
+import type { EligibilityRequest } from '../../shared/types';
 import { requireAuth } from './auth';
 import type { Variables } from '../types';
 import votesRoute from './votes';
@@ -26,6 +30,36 @@ api.get('/game-status/:steamId', async c => {
   if (!profile) return c.json(null, 404);
   const statuses = await getGameStatusesNow([steamId], c.env);
   return c.json(statuses[steamId] ?? null);
+});
+
+api.get('/filter-conditions', async c => {
+  const conditions = await getFilterConditions(c.env);
+  return c.json(conditions.map(({ key, label }) => ({ key, label })));
+});
+
+api.post('/eligibility', async c => {
+  const body = await c.req.json<EligibilityRequest>().catch((): EligibilityRequest => []);
+  if (!body.length) return c.json([]);
+
+  const steamIds = [...new Set(body.map(r => r.steamId))];
+
+  const [allConditions, statusMap] = await Promise.all([
+    getFilterConditions(c.env),
+    getGameStatusesNow(steamIds, c.env),
+  ]);
+  const conditionMap = new Map(allConditions.map(c => [c.key, c]));
+
+  const results = body.map(({ steamId, conditionKeys }) => {
+    const status = statusMap[steamId];
+    const context: EvalContext = {
+      playtime_forever: status?.playtime_forever,
+      playtime_2weeks: status?.playtime_2weeks,
+    };
+    const conditions = conditionKeys.flatMap(k => { const c = conditionMap.get(k); return c ? [c] : []; });
+    return { steamId, conditions: evaluate(conditions, context), noGameStatus: !status };
+  });
+
+  return c.json(results);
 });
 
 api.route('/votes', votesRoute);

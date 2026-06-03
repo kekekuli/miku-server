@@ -2,7 +2,8 @@ import { useState } from 'react';
 import styled from 'styled-components';
 import { Badge, Button, Flex, Text, Tooltip } from '@radix-ui/themes';
 import { useGetVotesQuery, useGetGameStatusQuery } from '../lib/api';
-import type { GameStatus } from '../../shared/types';
+import type { EligibilityResult, GameStatus } from '../../shared/types';
+import type { LogicMode } from '../types';
 
 const Card = styled.div`
   background: #2a475e;
@@ -55,6 +56,10 @@ export interface CandidateCardProps {
   onUnvote: () => void;
   onCardClick?: () => void;
   disabled?: boolean;
+  eligibilityResults?: EligibilityResult[];
+  noGameStatus?: boolean;
+  labelMap?: Map<string, string>;
+  logic?: LogicMode;
 }
 
 function formatHours(minutes: number) {
@@ -74,6 +79,10 @@ export default function CandidateCard({
   onUnvote,
   onCardClick,
   disabled,
+  eligibilityResults,
+  noGameStatus,
+  labelMap,
+  logic = 'AND',
 }: CandidateCardProps) {
   const totalVotes = useTotalVotes();
   const percentage = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
@@ -126,6 +135,30 @@ export default function CandidateCard({
           </BarTrack>
         </div>
       </Flex>
+
+      {eligibilityResults && eligibilityResults.length > 0 && (
+        <Flex direction="column" gap="1">
+          {noGameStatus && (
+            <Badge color="orange" size="1">无法获取游戏数据</Badge>
+          )}
+          {eligibilityResults.map(r => (
+            <Flex key={r.key} align="center" gap="1">
+              <Text size="1">{r.passed ? '✓' : '✗'}</Text>
+              <Text size="1" color={r.passed ? 'green' : 'red'}>{labelMap?.get(r.key) ?? r.key}</Text>
+            </Flex>
+          ))}
+          <Badge color={
+            logic === 'AND'
+              ? eligibilityResults.every(r => r.passed) ? 'green' : 'red'
+              : eligibilityResults.some(r => r.passed) ? 'green' : 'red'
+          } size="1">
+            {logic === 'AND'
+              ? eligibilityResults.every(r => r.passed) ? '符合条件' : '不符合条件'
+              : eligibilityResults.some(r => r.passed) ? '符合条件' : '不符合条件'
+            }
+          </Badge>
+        </Flex>
+      )}
 
       {!isSelf && (
         <Flex justify="end">

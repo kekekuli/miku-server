@@ -1,5 +1,5 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import type { SteamProfile, VotesResponse, AdminMe, GameStatus } from '../../shared/types';
+import type { SteamProfile, VotesResponse, AdminMe, GameStatus, EligibilityRequest, EligibilityResponse, ConditionLabel } from '../../shared/types';
 
 export const api = createApi({
   reducerPath: 'api',
@@ -59,6 +59,16 @@ export const api = createApi({
       query: steamId => ({ url: `admin/candidates/${steamId}`, method: 'DELETE' }),
       invalidatesTags: ['Votes'],
     }),
+    getFilterCondition: builder.query<ConditionLabel[], void>({
+      query: () => 'api/filter-conditions',
+    }),
+    getEligibility: builder.query<EligibilityResponse, EligibilityRequest>({
+      query: body => ({
+        url: 'api/eligibility',
+        method: 'POST',
+        body
+      })
+    })
   }),
 });
 
@@ -74,4 +84,6 @@ export const {
   useSendRconMutation,
   useResetVotesMutation,
   useDeleteCandidateMutation,
+  useGetFilterConditionQuery,
+  useGetEligibilityQuery,
 } = api;

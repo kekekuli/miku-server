@@ -1,5 +1,6 @@
 import qs from 'qs';
 import { withCache } from './cache';
+import type { EligibilityCondition, EligibilityRule } from '../types';
 
 export type AdminPermissions = Record<string, true>;
 
@@ -11,16 +12,16 @@ interface StrapiSingleResponse<T> { data: T }
 type FilterPrimitive = string | number | boolean;
 
 type FilterOperator = {
-  $eq?:        FilterPrimitive;
-  $ne?:        FilterPrimitive;
-  $gt?:        FilterPrimitive;
-  $gte?:       FilterPrimitive;
-  $lt?:        FilterPrimitive;
-  $lte?:       FilterPrimitive;
-  $contains?:  string;
-  $in?:        FilterPrimitive[];
-  $nin?:       FilterPrimitive[];
-  $null?:      boolean;
+  $eq?: FilterPrimitive;
+  $ne?: FilterPrimitive;
+  $gt?: FilterPrimitive;
+  $gte?: FilterPrimitive;
+  $lt?: FilterPrimitive;
+  $lte?: FilterPrimitive;
+  $contains?: string;
+  $in?: FilterPrimitive[];
+  $nin?: FilterPrimitive[];
+  $null?: boolean;
 };
 
 // Primitive shorthand = $eq; or explicit operator object
@@ -30,6 +31,8 @@ export type Filters = Record<string, FilterValue>;
 interface FindOptions {
   filters?: Filters;
   pagination?: { limit: number };
+  populate?: string[];
+  sort?: string;
   cacheTtl?: number;
 }
 
@@ -60,8 +63,10 @@ export function strapi(env: Env) {
   return {
     async find<T>(collection: string, options: FindOptions = {}): Promise<T[]> {
       const query: Record<string, unknown> = {};
-      if (options.filters)              query.filters = options.filters;
-      if (options.pagination?.limit)    query.pagination = { limit: options.pagination.limit };
+      if (options.filters) query.filters = options.filters;
+      if (options.pagination?.limit) query.pagination = { limit: options.pagination.limit };
+      if (options.populate) query.populate = options.populate;
+      if (options.sort) query.sort = options.sort;
 
       const url = buildUrl(env.STRAPI_URL, collection, query);
       const res = await request<StrapiListResponse<T>>(url, env, options.cacheTtl);
@@ -100,4 +105,35 @@ export async function getAdminPermissions(steamId: string, env: Env): Promise<Ad
   }
 
   return permissions;
+}
+
+interface StrapiFilterRule {
+  operator: string;
+  value: number;
+  unit: string;
+}
+
+interface StrapiFilterCondition {
+  documentId: string;
+  label: string;
+  order: number;
+  rules: StrapiFilterRule[];
+  field_definition: { key: string } | null;
+}
+
+export async function getFilterConditions(env: Env): Promise<EligibilityCondition[]> {
+  const items = await strapi(env).find<StrapiFilterCondition>('filter-conditions', {
+    populate: ['rules', 'field_definition'],
+    sort: 'order',
+    cacheTtl: 300,
+  });
+
+  return items
+    .filter(item => item.field_definition !== null)
+    .map(item => ({
+      key: item.documentId,
+      label: item.label,
+      field: item.field_definition!.key,
+      rules: item.rules.map(r => ({ operator: r.operator as EligibilityRule['operator'], value: r.value, unit: r.unit as EligibilityRule['unit'] })),
+    }));
 }

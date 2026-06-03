@@ -11,7 +11,7 @@ export type SteamProfile = Omit<InferSelectModel<typeof steamProfiles>, 'squad44
   squad44Status: GameStatus | null;
 };
 
-export type VoteCandidate = InferSelectModel<typeof candidates>;
+type VoteCandidate = InferSelectModel<typeof candidates>;
 
 export interface VoteResult {
   candidate: VoteCandidate & { profile: SteamProfile; nominatorProfile: SteamProfile };
@@ -27,3 +27,16 @@ export interface AdminMe {
   permissions: Record<string, true>;
   features: Record<string, true>;
 }
+
+export interface EligibilityResult {
+  key: string;
+  passed: boolean;
+}
+
+export interface ConditionLabel {
+  key: string;
+  label: string;
+}
+
+export type EligibilityRequest = { steamId: string; conditionKeys: string[] }[];
+export type EligibilityResponse = { steamId: string; conditions: EligibilityResult[]; noGameStatus: boolean }[];
