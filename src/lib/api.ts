@@ -27,7 +27,7 @@ export const api = createApi({
     }),
     nominate: builder.mutation<void, string | undefined>({
       query: steamId => ({
-        url: 'api/candidates',
+        url: 'api/votes/candidates',
         method: 'POST',
         body: steamId ? { steamId } : undefined,
       }),

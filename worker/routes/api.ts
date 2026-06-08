@@ -1,12 +1,8 @@
 import { Hono } from 'hono';
-import { drizzle } from 'drizzle-orm/d1';
-import { eq } from 'drizzle-orm';
-import { candidates } from '../../db/schema';
 import { getSteamProfiles, getGameStatusNow, getGameStatusQueued } from '../lib/steam';
 import { getFilterConditions } from '../lib/strapi';
 import { evaluate } from '../lib/evaluate';
 import type { EvalContext } from '../lib/evaluate';
-import { checkGate } from '../lib/gate';
 import type { EligibilityRequest } from '../../shared/types';
 import { requireAuth } from './auth';
 import type { Variables } from '../types';
@@ -67,24 +63,5 @@ api.post('/eligibility', async c => {
 });
 
 api.route('/votes', votesRoute);
-
-api.post('/candidates', requireAuth, async c => {
-  const steamid = c.get('steamid');
-  const body = await c.req.json<{ steamId?: string }>().catch((): { steamId?: string } => ({}));
-  const targetId = body.steamId ?? steamid;
-
-  const gateError = await checkGate(steamid, 'candidate', c.env);
-  if (gateError) return c.text(gateError, 403);
-
-  const [profile] = await getSteamProfiles([targetId], c.env);
-  if (!profile) return c.text('Steam profile not found', 404);
-
-  const db = drizzle(c.env.DB);
-  const existing = await db.select().from(candidates).where(eq(candidates.steamId, profile.steamId)).get();
-
-  if (existing) return c.text('重复的候选人', 409);
-  await db.insert(candidates).values({ steamId: profile.steamId, nominatedBy: steamid });
-  return c.json({ steamId: profile.steamId, name: profile.name, avatar: profile.avatar }, 201);
-});
 
 export default api;

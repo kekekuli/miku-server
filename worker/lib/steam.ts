@@ -129,6 +129,7 @@ async function resolveFromKV(steamIds: string[], kv: KVNamespace): Promise<{ res
   const profileKeys = steamIds.map(id => `${PROFILE_KV_PREFIX}${id}`);
   const gameStatusKeys = steamIds.map(id => `${GAME_STATUS_KV_PREFIX}${id}`);
 
+  // in latest KV API(2026.6.8), kv.get() support pass in arrays
   const [profileMaps, gameStatusMaps] = await Promise.all([
     Promise.all(chunk(profileKeys, MAX_STEAM_PROFILES_PER_REQUEST).map(c => kv.get(c, { type: 'json' }))),
     Promise.all(chunk(gameStatusKeys, MAX_STEAM_PROFILES_PER_REQUEST).map(c => kv.get(c, { type: 'json' }))),
