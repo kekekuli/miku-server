@@ -7,7 +7,7 @@ export interface GameStatus {
   playtime_2weeks?: number;
 }
 
-export type SteamProfile = Omit<InferSelectModel<typeof steamProfiles>, 'squad44Status'> & {
+export type SteamProfile = InferSelectModel<typeof steamProfiles> & {
   squad44Status: GameStatus | null;
 };
 

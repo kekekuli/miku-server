@@ -6,10 +6,12 @@ import { getSteamProfiles, getGameStatusNow, getGameStatusQueued } from '../lib/
 import { getFilterConditions } from '../lib/strapi';
 import { evaluate } from '../lib/evaluate';
 import type { EvalContext } from '../lib/evaluate';
+import { checkGate } from '../lib/gate';
 import type { EligibilityRequest } from '../../shared/types';
 import { requireAuth } from './auth';
 import type { Variables } from '../types';
 import votesRoute from './votes';
+
 
 const api = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -49,15 +51,17 @@ api.post('/eligibility', async c => {
   ]);
   const conditionMap = new Map(allConditions.map(c => [c.key, c]));
 
-  const results = body.map(({ steamId, conditionKeys }) => {
+  const results = await Promise.all(body.map(async ({ steamId, conditionKeys }) => {
     const status = statusMap[steamId];
+    // getGameStatusQueued is a batch call
+    // so we need make EvalContext inline to avoid open to many network request in parallel
     const context: EvalContext = {
-      playtime_forever: status?.playtime_forever,
-      playtime_2weeks: status?.playtime_2weeks,
+      playtime_forever: () => Promise.resolve(status?.playtime_forever),
+      playtime_2weeks: () => Promise.resolve(status?.playtime_2weeks),
     };
-    const conditions = conditionKeys.flatMap(k => { const c = conditionMap.get(k); return c ? [c] : []; });
-    return { steamId, conditions: evaluate(conditions, context), noGameStatus: !status };
-  });
+    const conditions = conditionKeys.flatMap(k => { const cond = conditionMap.get(k); return cond ? [cond] : []; });
+    return { steamId, conditions: await evaluate(conditions, context), noGameStatus: !status };
+  }));
 
   return c.json(results);
 });
@@ -68,6 +72,9 @@ api.post('/candidates', requireAuth, async c => {
   const steamid = c.get('steamid');
   const body = await c.req.json<{ steamId?: string }>().catch((): { steamId?: string } => ({}));
   const targetId = body.steamId ?? steamid;
+
+  const gateError = await checkGate(steamid, 'candidate', c.env);
+  if (gateError) return c.text(gateError, 403);
 
   const [profile] = await getSteamProfiles([targetId], c.env);
   if (!profile) return c.text('Steam profile not found', 404);

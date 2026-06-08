@@ -5,6 +5,7 @@ import { candidates, votes } from '../../db/schema';
 import { parseCookie, verifyJWT } from '../lib/jwt';
 import { requireAuth } from './auth';
 import { getSteamProfiles } from '../lib/steam';
+import { checkGate } from '../lib/gate';
 import type { Variables } from '../types';
 
 const votesRoute = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -69,6 +70,9 @@ votesRoute.post('/', requireAuth, async c => {
   const { candidateId } = await c.req.json<{ candidateId: string }>();
 
   if (steamid === candidateId) return c.text('Cannot vote for yourself', 400);
+
+  const gateError = await checkGate(steamid, 'vote', c.env);
+  if (gateError) return c.text(gateError, 403);
 
   const db = drizzle(c.env.DB);
   const candidate = await db.select().from(candidates).where(eq(candidates.steamId, candidateId)).get();

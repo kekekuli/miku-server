@@ -123,6 +123,9 @@ interface StrapiFilterCondition {
 
 export async function getFilterConditions(env: Env): Promise<EligibilityCondition[]> {
   const items = await strapi(env).find<StrapiFilterCondition>('filter-conditions', {
+    filters: {
+      visibleInFilter: true,
+    },
     populate: ['rules', 'field_definition'],
     sort: 'order',
     cacheTtl: 300,
@@ -136,4 +139,37 @@ export async function getFilterConditions(env: Env): Promise<EligibilityConditio
       field: item.field_definition!.key,
       rules: item.rules.map(r => ({ operator: r.operator as EligibilityRule['operator'], value: r.value, unit: r.unit as EligibilityRule['unit'] })),
     }));
+}
+
+interface StrapiVoteGate {
+  type: 'vote' | 'candidate',
+  logic: 'AND' | 'OR',
+  filter_conditions: StrapiFilterCondition[];
+}
+export interface VoteGate {
+  logic: 'AND' | 'OR',
+  conditions: EligibilityCondition[]
+}
+
+export async function getVoteGate(type: 'vote' | 'candidate', env: Env): Promise<VoteGate | null> {
+  const items = await strapi(env).find<StrapiVoteGate>('vote-gates', {
+    filters: { type },
+    populate: ['filter_conditions', 'filter_conditions.rules', 'filter_conditions.field_definition'],
+    pagination: { limit: 1 },
+    cacheTtl: 300
+  })
+  if (!items.length) return null;
+
+  const item = items[0];
+  return {
+    logic: item.logic,
+    conditions: item.filter_conditions
+      .filter(c => c.field_definition !== null)
+      .map(c => ({
+        key: c.documentId,
+        label: c.label,
+        field: c.field_definition!.key,
+        rules: c.rules.map(r => ({ operator: r.operator as EligibilityRule['operator'], value: r.value, unit: r.unit as EligibilityRule['unit'] })),
+      }))
+  }
 }

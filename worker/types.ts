@@ -6,7 +6,7 @@ export type AdminVariables = Variables & { adminPermissions: AdminPermissions };
 export interface EligibilityRule {
   operator: 'gt' | 'gte' | 'lt' | 'lte' | 'eq';
   value: number;
-  unit: 'hours' | 'minutes' | 'seconds';
+  unit: 'none' | 'hours' | 'minutes' | 'seconds';
 }
 
 export interface EligibilityCondition {

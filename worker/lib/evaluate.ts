@@ -1,14 +1,20 @@
 import type { EligibilityCondition } from '../types';
 import type { EligibilityResult } from '../../shared/types';
 
-export type EvalContext = Record<string, number | undefined>;
+export type EvalContext = Record<string, () => Promise<number | undefined>>;
 
-function toMinutes(value: number, unit: string): number {
+export function memoize<T>(fn: () => Promise<T>): () => Promise<T> {
+  let cache: Promise<T> | undefined;
+  return () => cache ??= fn();
+}
+
+function normalize(value: number, unit: string): number {
   switch (unit) {
-    case 'hours':   return value * 60;
+    case 'none': return value;
+    case 'hours': return value * 60;
     case 'minutes': return value;
     case 'seconds': return value / 60;
-    default:        return value;
+    default: return value;
   }
 }
 
@@ -24,11 +30,15 @@ function compare(value: number | undefined, operator: string, threshold: number)
   }
 }
 
-export function evaluate(conditions: EligibilityCondition[], context: EvalContext): EligibilityResult[] {
-  return conditions.map(condition => ({
-    key: condition.key,
-    passed: condition.rules.every(rule =>
-      compare(context[condition.field], rule.operator, toMinutes(rule.value, rule.unit))
-    ),
+export async function evaluate(conditions: EligibilityCondition[], context: EvalContext): Promise<EligibilityResult[]> {
+  return Promise.all(conditions.map(async condition => {
+    const value = await context[condition.field]?.();
+    return {
+      key: condition.key,
+      passed: condition.rules.every(rule =>
+        compare(value, rule.operator, normalize(rule.value, rule.unit))
+      ),
+    };
   }));
 }
+
