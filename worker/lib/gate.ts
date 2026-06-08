@@ -2,7 +2,7 @@ import { drizzle } from 'drizzle-orm/d1';
 import { eq, count } from 'drizzle-orm';
 import { candidates } from '../../db/schema';
 import { getGameStatusNow } from './steam';
-import { getVoteGate } from './strapi';
+import { getVoteGate, getAdminPermissions } from './strapi';
 import { evaluate, memoize } from './evaluate';
 import type { EvalContext } from './evaluate';
 
@@ -24,10 +24,18 @@ export function createEvalContext(steamId: string, env: Env): EvalContext {
 }
 
 export async function checkGate(steamId: string, type: 'vote' | 'candidate', env: Env): Promise<string | null> {
-  const gate = await getVoteGate(type, env);
+  const context = createEvalContext(steamId, env);
+  const gatePromise = getVoteGate(type, env);
+  const permissionsPromise = getAdminPermissions(steamId, env);
+  context.playtime_forever();
+  context.nomination_count();
+
+  const gate = await gatePromise;
   if (!gate || gate.conditions.length === 0) return null;
 
-  const context = createEvalContext(steamId, env);
+  const permissions = await permissionsPromise;
+  if (permissions && 'canSkipVoteGate' in permissions) return null;
+
   const results = await evaluate(gate.conditions, context);
   const failedResults = results.filter(r => !r.passed);
   const passed = gate.logic === 'AND'
