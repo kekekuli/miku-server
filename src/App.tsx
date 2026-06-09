@@ -18,7 +18,7 @@ export default function App() {
       <ModalProvider />
       <Header />
       <Routes>
-        {profile ? (
+{profile ? (
           <>
             <Route path="/" element={<ProfilePage />} />
             <Route path="/vote" element={<VotePage />} />

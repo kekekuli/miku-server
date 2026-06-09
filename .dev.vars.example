@@ -11,3 +11,5 @@ RCON_PASSWORD=your_rcon_password
 
 OPENOBSERVE_URL=https://your-openobserve-instance.example.com
 OPENOBSERVE_TOKEN=your_openobserve_basic_auth_token
+
+FILES_TUNNEL_URL=

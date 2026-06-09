@@ -4,6 +4,7 @@ import { count, desc, eq } from 'drizzle-orm';
 import auth from './routes/auth';
 import api from './routes/api';
 import admin from './routes/admin';
+import files from './routes/files';
 import { executeGameStatusRefresh, getGameStatusQueued } from './lib/steam';
 import { candidates, votes } from '../db/schema';
 
@@ -12,6 +13,7 @@ const app = new Hono<{ Bindings: Env }>();
 app.route('/auth', auth);
 app.route('/api', api);
 app.route('/admin', admin);
+app.route('/files', files);
 
 app.all('*', c => {
   const { pathname } = new URL(c.req.url);
