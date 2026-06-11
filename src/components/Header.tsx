@@ -24,6 +24,7 @@ export default function Header() {
           {profile && (
             <>
               <NavLink to="/vote" style={navStyle}>op投票</NavLink>
+              <NavLink to="/team-swap" style={navStyle}>自助跳边</NavLink>
               <NavLink to="/" end style={navStyle}>个人页</NavLink>
               {isAdmin && <NavLink to="/admin" style={navStyle}>管理</NavLink>}
             </>

@@ -40,3 +40,18 @@ export interface ConditionLabel {
 
 export type EligibilityRequest = { steamId: string; conditionKeys: string[] }[];
 export type EligibilityResponse = { steamId: string; conditions: EligibilityResult[]; noGameStatus: boolean }[];
+
+export interface TeamSwapRequest {
+  requester: Pick<SteamProfile, 'steamId' | 'name' | 'avatar'>;
+  target: Pick<SteamProfile, 'steamId' | 'name' | 'avatar'> | null;
+}
+
+export interface TeamSwapStatus {
+  usedToday: boolean;
+  myPending: boolean;
+  requests: TeamSwapRequest[];
+}
+
+export type TeamSwapResult =
+  | { status: 'changed'; changedSteamId: string; reason: 'low_hours' | 'matched' }
+  | { status: 'pending'; message: string };

@@ -7,6 +7,7 @@ import type { EligibilityRequest } from '../../shared/types';
 import { requireAuth } from './auth';
 import type { Variables } from '../types';
 import votesRoute from './votes';
+import teamSwapRoute from './teamswap';
 
 
 const api = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -63,5 +64,6 @@ api.post('/eligibility', async c => {
 });
 
 api.route('/votes', votesRoute);
+api.route('/team-swap', teamSwapRoute);
 
 export default api;

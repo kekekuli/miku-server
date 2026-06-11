@@ -1,10 +1,10 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import type { SteamProfile, VotesResponse, AdminMe, GameStatus, EligibilityRequest, EligibilityResponse, ConditionLabel } from '../../shared/types';
+import type { SteamProfile, VotesResponse, AdminMe, GameStatus, EligibilityRequest, EligibilityResponse, ConditionLabel, TeamSwapStatus, TeamSwapResult } from '../../shared/types';
 
 export const api = createApi({
   reducerPath: 'api',
   baseQuery: fetchBaseQuery({ baseUrl: '/' }),
-  tagTypes: ['Votes', 'AdminMe'],
+  tagTypes: ['Votes', 'AdminMe', 'TeamSwap'],
   endpoints: builder => ({
     getMe: builder.query<SteamProfile, void>({
       query: () => 'api/me',
@@ -68,7 +68,23 @@ export const api = createApi({
         method: 'POST',
         body
       })
-    })
+    }),
+    getTeamSwapStatus: builder.query<TeamSwapStatus, void>({
+      query: () => 'api/team-swap',
+      providesTags: ['TeamSwap'],
+    }),
+    sendTeamSwap: builder.mutation<TeamSwapResult, string>({
+      query: targetSteamId => ({
+        url: 'api/team-swap',
+        method: 'POST',
+        body: { targetSteamId },
+      }),
+      invalidatesTags: ['TeamSwap'],
+    }),
+    cancelTeamSwap: builder.mutation<void, void>({
+      query: () => ({ url: 'api/team-swap', method: 'DELETE' }),
+      invalidatesTags: ['TeamSwap'],
+    }),
   }),
 });
 
@@ -86,4 +102,7 @@ export const {
   useDeleteCandidateMutation,
   useGetFilterConditionQuery,
   useGetEligibilityQuery,
+  useGetTeamSwapStatusQuery,
+  useSendTeamSwapMutation,
+  useCancelTeamSwapMutation,
 } = api;
