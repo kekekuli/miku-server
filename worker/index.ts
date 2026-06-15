@@ -7,9 +7,12 @@ import admin from './routes/admin';
 import files from './routes/files';
 import { executeGameStatusRefresh, getGameStatusQueued } from './lib/steam';
 import { candidates, votes } from '../db/schema';
+import { openobserve } from './lib/openobserve';
+import type { Variables } from './types';
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+app.use('*', openobserve);
 app.route('/auth', auth);
 app.route('/api', api);
 app.route('/admin', admin);

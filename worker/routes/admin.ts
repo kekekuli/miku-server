@@ -12,13 +12,19 @@ type AdminEnv = { Bindings: Env; Variables: AdminVariables };
 
 const requireAdmin = createMiddleware<AdminEnv>(async (c, next) => {
   const token = parseCookie(c.req.header('Cookie') ?? '')['token'];
-  if (!token) return c.json({ error: 'Unauthorized' }, 401);
+  if (!token) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
 
   const payload = await verifyJWT(token, c.env.JWT_SECRET);
-  if (!payload) return c.json({ error: 'Unauthorized' }, 401);
+  if (!payload) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
 
   const permissions = await getAdminPermissions(payload.steamid, c.env);
-  if (!permissions) return c.json({ error: 'Forbidden' }, 403);
+  if (!permissions) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
 
   c.set('steamid', payload.steamid);
   c.set('adminPermissions', permissions);
@@ -58,9 +64,11 @@ admin.post('/rcon', requirePermission('canRcon'), async c => {
       c.env.RCON_PASSWORD,
       command.trim(),
     );
+    c.var.logEvent('admin_actions', { action: 'rcon_command', steamid: c.get('steamid'), command: command.trim(), success: true });
     return c.json({ output });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'RCON command failed';
+    c.var.logEvent('admin_actions', { action: 'rcon_command', steamid: c.get('steamid'), command: command.trim(), success: false, error: message });
     return c.json({ error: message }, 500);
   }
 });
@@ -68,6 +76,7 @@ admin.post('/rcon', requirePermission('canRcon'), async c => {
 admin.delete('/votes/reset', requirePermission('canManageVotes'), async c => {
   const db = drizzle(c.env.DB);
   await db.delete(votes);
+  c.var.logEvent('admin_actions', { action: 'votes_reset', steamid: c.get('steamid') });
   return c.body(null, 204);
 });
 
@@ -76,6 +85,7 @@ admin.delete('/candidates/:steamId', requirePermission('canManageCandidates'), a
   const db = drizzle(c.env.DB);
   await db.delete(votes).where(eq(votes.candidateId, steamId));
   await db.delete(candidates).where(eq(candidates.steamId, steamId));
+  c.var.logEvent('admin_actions', { action: 'candidate_delete', steamid: c.get('steamid'), targetSteamId: steamId });
   return c.body(null, 204);
 });
 

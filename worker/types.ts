@@ -1,6 +1,8 @@
 import type { AdminPermissions } from './lib/strapi';
 
-export type Variables = { steamid: string };
+export type LogEvent = (stream: string, fields: Record<string, unknown>) => void;
+
+export type Variables = { steamid: string; logEvent: LogEvent };
 export type AdminVariables = Variables & { adminPermissions: AdminPermissions };
 
 export interface EligibilityRule {
