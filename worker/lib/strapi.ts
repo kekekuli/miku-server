@@ -173,3 +173,43 @@ export async function getVoteGate(type: 'vote' | 'candidate', env: Env): Promise
       }))
   }
 }
+
+export interface GameServer {
+  displayName: string;
+  rconHost: string;
+  rconPort: number;
+  rconPassword: string;
+  filesTunnelUrl: string;
+  isActive: boolean;
+}
+
+export async function getActiveGameServer(env: Env): Promise<GameServer | null> {
+  const servers = await strapi(env).find<GameServer>('game-servers', {
+    filters: { isActive: true },
+    pagination: { limit: 1 },
+    cacheTtl: 60,
+  });
+  const server = servers[0];
+  // rconPort is stored as a string field in Strapi (mirrors the old RCON_PORT env var)
+  return server ? { ...server, rconPort: Number(server.rconPort) } : null;
+}
+
+export interface GameServerOption {
+  id: string;
+  displayName: string;
+  isActive: boolean;
+}
+
+export async function listRconGameServers(env: Env): Promise<GameServerOption[]> {
+  const servers = await strapi(env).find<GameServer & { documentId: string }>('game-servers', {
+    cacheTtl: 60,
+  });
+  return servers
+    .filter(s => s.rconHost && s.rconPort && s.rconPassword)
+    .map(s => ({ id: s.documentId, displayName: s.displayName, isActive: s.isActive }));
+}
+
+export async function getGameServerById(id: string, env: Env): Promise<GameServer | null> {
+  const server = await strapi(env).findOne<GameServer>(`game-servers/${id}`, { cacheTtl: 60 });
+  return server ? { ...server, rconPort: Number(server.rconPort) } : null;
+}

@@ -4,7 +4,7 @@ import { drizzle } from 'drizzle-orm/d1';
 import { eq } from 'drizzle-orm';
 import { candidates, votes } from '../../db/schema';
 import { parseCookie, verifyJWT } from '../lib/jwt';
-import { getAdminPermissions } from '../lib/strapi';
+import { getAdminPermissions, listRconGameServers, getGameServerById } from '../lib/strapi';
 import { sendRconCommand } from '../lib/rcon';
 import type { AdminVariables } from '../types';
 
@@ -41,34 +41,43 @@ const admin = new Hono<AdminEnv>();
 
 admin.use('*', requireAdmin);
 
-admin.get('/me', c => {
+admin.get('/me', async c => {
   const features: Record<string, true> = {};
-  if (c.env.RCON_HOST && c.env.RCON_PORT && c.env.RCON_PASSWORD) features.rcon = true;
+  const servers = await listRconGameServers(c.env);
+  if (servers.length > 0) features.rcon = true;
   if (c.env.OPENOBSERVE_URL && c.env.OPENOBSERVE_TOKEN) features.openobserve = true;
   return c.json({ permissions: c.get('adminPermissions'), features });
 });
 
+admin.get('/game-servers', requirePermission('canRcon'), async c => {
+  const servers = await listRconGameServers(c.env);
+  return c.json(servers);
+});
+
 admin.post('/rcon', requirePermission('canRcon'), async c => {
-  if (!c.env.RCON_HOST || !c.env.RCON_PORT || !c.env.RCON_PASSWORD) {
-    return c.json({ error: 'RCON is not configured' }, 503);
+  const { command, gameServerId }: { command?: string; gameServerId?: string } = await c.req.json();
+  if (!gameServerId) return c.json({ error: 'gameServerId is required' }, 400);
+
+  const gameServer = await getGameServerById(gameServerId, c.env);
+  if (!gameServer || !gameServer.rconHost || !gameServer.rconPort || !gameServer.rconPassword) {
+    return c.json({ error: 'RCON is not configured for this server' }, 503);
   }
 
-  const { command }: { command?: string } = await c.req.json();
   if (!command?.trim()) return c.json({ error: 'Command is required' }, 400);
   if (command.length > 512) return c.json({ error: 'Command too long (max 512 chars)' }, 400);
 
   try {
     const output = await sendRconCommand(
-      c.env.RCON_HOST,
-      Number(c.env.RCON_PORT),
-      c.env.RCON_PASSWORD,
+      gameServer.rconHost,
+      gameServer.rconPort,
+      gameServer.rconPassword,
       command.trim(),
     );
-    c.var.logEvent('admin_actions', { action: 'rcon_command', steamid: c.get('steamid'), command: command.trim(), success: true });
+    c.var.logEvent('admin_actions', { action: 'rcon_command', steamid: c.get('steamid'), command: command.trim(), gameServerId, success: true });
     return c.json({ output });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'RCON command failed';
-    c.var.logEvent('admin_actions', { action: 'rcon_command', steamid: c.get('steamid'), command: command.trim(), success: false, error: message });
+    c.var.logEvent('admin_actions', { action: 'rcon_command', steamid: c.get('steamid'), command: command.trim(), gameServerId, success: false, error: message });
     return c.json({ error: message }, 500);
   }
 });

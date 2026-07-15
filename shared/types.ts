@@ -28,6 +28,12 @@ export interface AdminMe {
   features: Record<string, true>;
 }
 
+export interface GameServerOption {
+  id: string;
+  displayName: string;
+  isActive: boolean;
+}
+
 export interface EligibilityResult {
   key: string;
   passed: boolean;

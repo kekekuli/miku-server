@@ -1,8 +1,8 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import styled from 'styled-components';
-import { Badge, Button, Flex, Text, TextField } from '@radix-ui/themes';
-import { useSendRconMutation } from '../../lib/api';
+import { Badge, Button, Flex, Select, Text, TextField } from '@radix-ui/themes';
+import { useGetGameServersQuery, useSendRconMutation } from '../../lib/api';
 import { openModal } from '../../lib/modalSlice';
 
 const Section = styled.div`
@@ -56,8 +56,15 @@ export default function RconPanel({ rconEnabled }: Props) {
   const dispatch = useDispatch();
   const [command, setCommand] = useState('');
   const [log, setLog] = useState<LogLine[]>([]);
+  const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
+  const { data: servers, isFetching: serversLoading } = useGetGameServersQuery(undefined, { skip: !rconEnabled });
   const [sendRcon, { isLoading }] = useSendRconMutation();
+
+  useEffect(() => {
+    if (!servers || servers.length === 0 || selectedServerId) return;
+    setSelectedServerId((servers.find(s => s.isActive) ?? servers[0]).id);
+  }, [servers, selectedServerId]);
 
   const handleSubmit = async () => {
     if (!rconEnabled) {
@@ -65,9 +72,9 @@ export default function RconPanel({ rconEnabled }: Props) {
       return;
     }
     const cmd = command.trim();
-    if (!cmd) return;
+    if (!cmd || !selectedServerId) return;
     setCommand('');
-    const result = await sendRcon(cmd);
+    const result = await sendRcon({ command: cmd, gameServerId: selectedServerId });
     const isError = 'error' in result;
     const output = isError
       ? ((result.error as { data?: { error?: string } }).data?.error ?? 'RCON 命令失败')
@@ -82,6 +89,22 @@ export default function RconPanel({ rconEnabled }: Props) {
         <SectionTitle>RCON 终端</SectionTitle>
         {!rconEnabled && <Badge color="red">未配置</Badge>}
       </Flex>
+      {rconEnabled && (
+        <Select.Root
+          value={selectedServerId ?? undefined}
+          onValueChange={setSelectedServerId}
+          disabled={serversLoading || !servers?.length}
+        >
+          <Select.Trigger placeholder={serversLoading ? '加载服务器列表...' : '选择服务器'} />
+          <Select.Content>
+            {servers?.map(s => (
+              <Select.Item key={s.id} value={s.id}>
+                {s.displayName}{s.isActive ? '（当前启用）' : ''}
+              </Select.Item>
+            ))}
+          </Select.Content>
+        </Select.Root>
+      )}
       <Terminal ref={terminalRef}>
         {log.length === 0 && (
           <Text size="1" color="gray">输入命令并按回车发送...</Text>
@@ -102,7 +125,7 @@ export default function RconPanel({ rconEnabled }: Props) {
             disabled={isLoading}
             style={{ flex: 1, fontFamily: 'monospace' }}
           />
-          <Button type="submit" disabled={isLoading || !command.trim()}>
+          <Button type="submit" disabled={isLoading || !command.trim() || !selectedServerId}>
             发送
           </Button>
         </Flex>

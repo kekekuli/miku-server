@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { requireAuth } from './auth';
 import { sendRconCommand } from '../lib/rcon';
 import { getGameStatusNow, getSteamProfiles } from '../lib/steam';
+import { getActiveGameServer, type GameServer } from '../lib/strapi';
 import type { Variables } from '../types';
 
 const LOW_HOURS_THRESHOLD_MINUTES = 200 * 60;
@@ -15,12 +16,12 @@ function todayCST(): string {
   return new Date(Date.now() + CST_OFFSET_MS).toISOString().slice(0, 10);
 }
 
-async function broadcastAndForceTeamChange(env: Env, changedId: string): Promise<void> {
+async function broadcastAndForceTeamChange(env: Env, gameServer: GameServer, changedId: string): Promise<void> {
   const [profile] = await getSteamProfiles([changedId], env);
   const name = profile?.name ?? changedId;
   // Broadcast failure is non-fatal
-  await sendRconCommand(env.RCON_HOST, Number(env.RCON_PORT), env.RCON_PASSWORD, `AdminBroadcast [自助跳边] 正在切换${name}的队伍`);
-  const result = await sendRconCommand(env.RCON_HOST, Number(env.RCON_PORT), env.RCON_PASSWORD, `AdminForceTeamChange ${changedId}`);
+  await sendRconCommand(gameServer.rconHost, gameServer.rconPort, gameServer.rconPassword, `AdminBroadcast [自助跳边] 正在切换${name}的队伍`);
+  const result = await sendRconCommand(gameServer.rconHost, gameServer.rconPort, gameServer.rconPassword, `AdminForceTeamChange ${changedId}`);
   if (result.trimStart().startsWith('ERROR')) throw new Error(result.trim());
 }
 
@@ -85,7 +86,8 @@ teamSwap.post('/', requireAuth, async c => {
   if (!targetId) return c.json({ error: 'targetSteamId is required' }, 400);
   if (targetId === myId) return c.json({ error: 'Cannot request with yourself' }, 400);
 
-  if (!c.env.RCON_HOST || !c.env.RCON_PORT || !c.env.RCON_PASSWORD) {
+  const gameServer = await getActiveGameServer(c.env);
+  if (!gameServer) {
     return c.json({ error: 'RCON is not configured' }, 503);
   }
 
@@ -111,7 +113,7 @@ teamSwap.post('/', requireAuth, async c => {
       const changedId = Math.random() < 0.5 ? myId : targetId;
 
       try {
-        await broadcastAndForceTeamChange(c.env, changedId);
+        await broadcastAndForceTeamChange(c.env, gameServer, changedId);
       } catch (err) {
         return c.json({ error: err instanceof Error ? err.message : '换队失败' }, 500);
       }
@@ -134,7 +136,7 @@ teamSwap.post('/', requireAuth, async c => {
 
     const changedId = Math.random() < 0.5 ? myId : targetId;
     try {
-      await broadcastAndForceTeamChange(c.env, changedId);
+      await broadcastAndForceTeamChange(c.env, gameServer, changedId);
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : '换队失败' }, 500);
     }

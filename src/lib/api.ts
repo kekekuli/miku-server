@@ -1,5 +1,5 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import type { SteamProfile, VotesResponse, AdminMe, GameStatus, EligibilityRequest, EligibilityResponse, ConditionLabel, TeamSwapStatus, TeamSwapResult } from '../../shared/types';
+import type { SteamProfile, VotesResponse, AdminMe, GameStatus, EligibilityRequest, EligibilityResponse, ConditionLabel, TeamSwapStatus, TeamSwapResult, GameServerOption } from '../../shared/types';
 
 export const api = createApi({
   reducerPath: 'api',
@@ -44,11 +44,14 @@ export const api = createApi({
       query: () => 'admin/me',
       providesTags: ['AdminMe'],
     }),
-    sendRcon: builder.mutation<{ output: string }, string>({
-      query: command => ({
+    getGameServers: builder.query<GameServerOption[], void>({
+      query: () => 'admin/game-servers',
+    }),
+    sendRcon: builder.mutation<{ output: string }, { command: string; gameServerId: string }>({
+      query: body => ({
         url: 'admin/rcon',
         method: 'POST',
-        body: { command },
+        body,
       }),
     }),
     resetVotes: builder.mutation<void, void>({
@@ -97,6 +100,7 @@ export const {
   useGetGameStatusQuery,
   useGetVotersQuery,
   useGetAdminMeQuery,
+  useGetGameServersQuery,
   useSendRconMutation,
   useResetVotesMutation,
   useDeleteCandidateMutation,
