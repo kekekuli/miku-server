@@ -47,22 +47,38 @@ export interface ConditionLabel {
 export type EligibilityRequest = { steamId: string; conditionKeys: string[] }[];
 export type EligibilityResponse = { steamId: string; conditions: EligibilityResult[]; noGameStatus: boolean }[];
 
-export interface RosterPlayer {
+/**
+ * 解析态 — a player exactly as RCON `ListPlayers` reported them, nothing more.
+ * Produced by parseListPlayers, lives only in memory during a poll, never persisted.
+ */
+export interface ParsedPlayer {
   steamId: string;
   /** In-game name from RCON — not the Steam persona name, and truncated by the server. */
   name: string;
 }
 
-/** A roster player enriched with their Steam profile, where one could be resolved. */
-export interface RosterEntry extends RosterPlayer {
+/**
+ * 展示态 — a parsed player joined with their Steam profile. This is what D1 stores
+ * and what the API returns; the frontend renders it without further lookups.
+ */
+export interface DisplayPlayer extends ParsedPlayer {
   /** Steam persona name. Null when the profile could not be resolved. */
   steamName: string | null;
   /** Null when the profile could not be resolved — render a placeholder. */
   avatar: string | null;
+  /**
+   * Whether a profile lookup has been attempted for this player.
+   *
+   * Distinguishes "not looked up yet" from "looked up and failed", which look
+   * identical otherwise (both have null steamName/avatar). A failed lookup must never
+   * be retried — private profiles and deleted accounts would retry every poll forever
+   * — but a lookup deferred by the per-poll cap must be picked up next time.
+   */
+  profileTried: boolean;
 }
 
 export interface RosterResponse {
-  players: RosterEntry[];
+  players: DisplayPlayer[];
   playerCount: number;
   connectingCount: number;
   /** Epoch ms of the last successful poll. */

@@ -5,7 +5,10 @@ import { sendRconCommand } from './rcon';
 import { parseListPlayers } from './listPlayers';
 import { getActiveGameServer } from './strapi';
 import { getSteamProfiles } from './steam';
-import type { RosterResponse } from '../../shared/types';
+import type { DisplayPlayer, ParsedPlayer, RosterResponse } from '../../shared/types';
+
+// Bounds how many unknown players one poll may resolve. See the diff in pollRoster.
+const MAX_NEW_PROFILES_PER_POLL = 10;
 
 /**
  * Polls the active game server's roster and stores it in D1.
@@ -48,7 +51,53 @@ export async function pollRoster(env: Env): Promise<void> {
 
   // parseListPlayers already routes null-SteamID entries into `connecting`, so this
   // only narrows the type rather than dropping anything.
-  const players = result.active.flatMap(p => p.steamId ? [{ steamId: p.steamId, name: p.name }] : []);
+  const parsed: ParsedPlayer[] = result.active.flatMap(p => p.steamId ? [{ steamId: p.steamId, name: p.name }] : []);
+
+  const db = drizzle(env.DB);
+  const [prevRow] = await db
+    .select()
+    .from(serverRoster)
+    .where(eq(serverRoster.gameServerId, gameServer.documentId))
+    .limit(1);
+  const prevMap = new Map((prevRow?.players ?? []).map(p => [p.steamId, p]));
+
+  // Only players we have never successfully attempted need a profile lookup. Everyone
+  // else reuses the Steam data already stored, so a steady-state poll does no KV reads
+  // at all. Capped per poll so a burst of unknown players (first deploy, map change,
+  // KV cache expiry) cannot spend a large slice of the 1,000/day KV write budget in
+  // one go — the remainder is picked up by subsequent polls a minute later.
+  const needLookup = parsed
+    .filter(p => !prevMap.get(p.steamId)?.profileTried)
+    .map(p => p.steamId)
+    .slice(0, MAX_NEW_PROFILES_PER_POLL);
+
+  const profiles = needLookup.length > 0
+    ? await getSteamProfiles(needLookup, env, { skipGameStatus: true }).catch((err: unknown) => {
+      console.warn('roster profile lookup failed:', err);
+      return [];
+    })
+    : [];
+  const profileMap = new Map(profiles.map(p => [p.steamId, p]));
+  const attempted = new Set(needLookup);
+
+  const players: DisplayPlayer[] = parsed.map(p => {
+    const prev = prevMap.get(p.steamId);
+    // Already resolved: keep the Steam data, but take the in-game name from this poll
+    // since players can rename mid-session.
+    if (prev?.profileTried) return { ...prev, name: p.name };
+
+    const profile = profileMap.get(p.steamId);
+    return {
+      steamId: p.steamId,
+      name: p.name,
+      steamName: profile?.name ?? null,
+      avatar: profile?.avatar ?? null,
+      // False here means "deferred by the cap", so the next poll retries. True with
+      // null values means the lookup genuinely failed and must not be retried.
+      profileTried: attempted.has(p.steamId),
+    };
+  });
+
   const row = {
     gameServerId: gameServer.documentId,
     players,
@@ -58,23 +107,13 @@ export async function pollRoster(env: Env): Promise<void> {
     parseOk: true,
   };
 
-  await drizzle(env.DB)
+  await db
     .insert(serverRoster)
     .values(row)
     .onConflictDoUpdate({ target: serverRoster.gameServerId, set: row });
 
-  console.log(`pollRoster: ${gameServer.documentId} -> ${players.length} players, ${result.connecting} connecting`);
-
-  // Warm the profile cache so the read path is a cache hit rather than a Steam API
-  // round-trip. Deliberately after the roster write and non-fatal: a Steam outage
-  // must not cost us the roster, which is the part that can only be read once.
-  if (players.length > 0) {
-    try {
-      await getSteamProfiles(players.map(p => p.steamId), env);
-    } catch (err) {
-      console.warn('roster profile warm failed:', err);
-    }
-  }
+  const pending = parsed.length - players.filter(p => p.profileTried).length;
+  console.log(`pollRoster: ${gameServer.documentId} -> ${players.length} players, ${result.connecting} connecting, ${needLookup.length} looked up, ${pending} pending`);
 }
 
 /** Reads the stored roster. Never contacts the game server. */
@@ -96,27 +135,10 @@ export async function getRoster(env: Env): Promise<RosterResponse | null> {
     return null;
   }
 
-  // Steam profiles are best-effort: getSteamProfiles drops IDs it cannot resolve
-  // (private profile, Steam API down, brand-new player). Those players still appear,
-  // identified by their SteamID and the in-game name RCON gave us.
-  const profiles = row.players.length > 0
-    ? await getSteamProfiles(row.players.map(p => p.steamId), env).catch((err: unknown) => {
-      console.warn('roster profile lookup failed:', err);
-      return [];
-    })
-    : [];
-  const profileMap = new Map(profiles.map(p => [p.steamId, p]));
-
+  // The row already holds the 展示态 — the cron joined the Steam data in. Nothing to
+  // resolve here, so a page view costs one D1 row read and touches no KV.
   return {
-    players: row.players.map(p => {
-      const profile = profileMap.get(p.steamId);
-      return {
-        steamId: p.steamId,
-        name: p.name,
-        steamName: profile?.name ?? null,
-        avatar: profile?.avatar ?? null,
-      };
-    }),
+    players: row.players,
     playerCount: row.playerCount,
     connectingCount: row.connectingCount,
     fetchedAt: row.fetchedAt,

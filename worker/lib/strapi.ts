@@ -184,11 +184,17 @@ export interface GameServer {
   isActive: boolean;
 }
 
+// Cached well above the roster poll interval on purpose: withCache writes to KV on
+// every miss, so a 60s TTL against a 60s cron would miss every tick and burn ~1,440
+// KV writes/day against a 1,000/day free limit. Which server is active changes rarely,
+// so ten minutes of staleness costs nothing.
+const ACTIVE_SERVER_CACHE_TTL = 600;
+
 export async function getActiveGameServer(env: Env): Promise<GameServer | null> {
   const servers = await strapi(env).find<GameServer>('game-servers', {
     filters: { isActive: true },
     pagination: { limit: 1 },
-    cacheTtl: 60,
+    cacheTtl: ACTIVE_SERVER_CACHE_TTL,
   });
   const server = servers[0];
   // rconPort is stored as a string field in Strapi (mirrors the old RCON_PORT env var)

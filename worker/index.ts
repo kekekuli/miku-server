@@ -13,7 +13,8 @@ import type { Variables } from './types';
 
 // Must match the expression in wrangler.jsonc `triggers.crons` exactly — that string
 // is how Cloudflare tells the two schedules apart in the scheduled handler.
-const ROSTER_CRON = '* * * * *';
+// UTC 04:00–15:59 == CST 12:00–23:59.
+const ROSTER_CRON = '* 4-15 * * *';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 

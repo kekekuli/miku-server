@@ -39,11 +39,14 @@
     }
   ],
   "triggers": {
-    // "0 19 * * *" — daily Steam game-status refresh for top candidates
-    // "* * * * *"  — roster poll (ListPlayers) for the active game server;
-    //                one minute is the finest granularity Cloudflare cron allows.
-    //                Keep this string in sync with ROSTER_CRON in worker/index.ts.
-    "crons": ["0 19 * * *", "* * * * *"]
+    // Cloudflare cron runs in UTC. The playerbase is CST (UTC+8), so hour ranges
+    // here are shifted by -8 from the intended local time.
+    //
+    // "0 19 * * *"   — daily Steam game-status refresh (03:00 CST)
+    // "* 4-15 * * *" — roster poll (ListPlayers) every minute, 12:00–23:59 CST.
+    //                  One minute is the finest granularity Cloudflare cron allows.
+    //                  Keep this string in sync with ROSTER_CRON in worker/index.ts.
+    "crons": ["0 19 * * *", "* 4-15 * * *"]
   },
   "queues": {
     "producers": [

@@ -1,5 +1,5 @@
 import { sqliteTable, text, integer, primaryKey } from 'drizzle-orm/sqlite-core';
-import type { RosterPlayer } from '../shared/types';
+import type { DisplayPlayer } from '../shared/types';
 
 export const steamProfiles = sqliteTable('steam_profiles', {
   steamId: text('steam_id').primaryKey(),
@@ -19,12 +19,15 @@ export const steamGameStatus = sqliteTable('steam_game_status', {
 }, t => [primaryKey({ columns: [t.steamId, t.appId] })]);
 
 // One row per game server, upserted by the roster cron. The player list is stored as
-// a JSON blob rather than a row per player: at 60 players x 1440 polls/day a
-// row-per-player layout would write ~86k rows/day against D1's 100k/day free limit,
-// while a single blob row costs 1,440.
+// a JSON blob rather than a row per player: a row-per-player layout would need the
+// previous set deleted or diffed on every poll (~98 row ops instead of 1), and the
+// roster is only ever read whole, never queried by player.
+//
+// Stores the 展示态 (DisplayPlayer) — Steam names and avatars already joined in by the
+// cron — so a page view is one row read and touches no KV at all.
 export const serverRoster = sqliteTable('server_roster', {
   gameServerId: text('game_server_id').primaryKey(),
-  players: text('players', { mode: 'json' }).$type<RosterPlayer[]>().notNull(),
+  players: text('players', { mode: 'json' }).$type<DisplayPlayer[]>().notNull(),
   playerCount: integer('player_count').notNull(),
   // Slots held by players who have not finished connecting (`SteamID: N/A`).
   connectingCount: integer('connecting_count').notNull(),

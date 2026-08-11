@@ -124,7 +124,7 @@ async function syncGameStatus(rows: GameStatusRow[], env: Env): Promise<void> {
   ]);
 }
 
-async function resolveFromKV(steamIds: string[], kv: KVNamespace): Promise<{ resolved: SteamProfile[]; remaining: string[] }> {
+async function resolveFromKV(steamIds: string[], kv: KVNamespace, skipGameStatus = false): Promise<{ resolved: SteamProfile[]; remaining: string[] }> {
   if (steamIds.length === 0) return { resolved: [], remaining: [] };
   const profileKeys = steamIds.map(id => `${PROFILE_KV_PREFIX}${id}`);
   const gameStatusKeys = steamIds.map(id => `${GAME_STATUS_KV_PREFIX}${id}`);
@@ -132,7 +132,11 @@ async function resolveFromKV(steamIds: string[], kv: KVNamespace): Promise<{ res
   // in latest KV API(2026.6.8), kv.get() support pass in arrays
   const [profileMaps, gameStatusMaps] = await Promise.all([
     Promise.all(chunk(profileKeys, MAX_STEAM_PROFILES_PER_REQUEST).map(c => kv.get(c, { type: 'json' }))),
-    Promise.all(chunk(gameStatusKeys, MAX_STEAM_PROFILES_PER_REQUEST).map(c => kv.get(c, { type: 'json' }))),
+    // KV bills bulk reads per key, so this second group doubles the read cost of
+    // every lookup. Callers that never touch squad44Status opt out of it.
+    skipGameStatus
+      ? Promise.resolve([])
+      : Promise.all(chunk(gameStatusKeys, MAX_STEAM_PROFILES_PER_REQUEST).map(c => kv.get(c, { type: 'json' }))),
   ]);
 
   const profileMap = new Map<string, Omit<SteamProfile, 'squad44Status'> | null>();
@@ -260,8 +264,31 @@ async function scheduleGameStatusRefresh(steamIds: string[], env: Env): Promise<
 
 // --- Public API ---
 
-export async function getSteamProfiles(steamIds: string[], env: Env): Promise<SteamProfile[]> {
-  const { resolved: fromKV, remaining: afterKV } = await resolveFromKV(steamIds, env.STEAM_PROFILE_CACHE);
+export interface GetSteamProfilesOptions {
+  /**
+   * Skip the `gs:` KV lookup, halving the read cost.
+   *
+   * Every profile normally costs two KV reads — `profile:` and `gs:` — and KV bills
+   * bulk reads per key, so a 49-player roster costs ~98 reads against a 100k/day free
+   * limit. Callers that only need name/avatar can opt out.
+   *
+   * When true, `squad44Status` is not guaranteed to be populated: it will be null for
+   * anyone resolved from KV, even if their playtime is cached. Only pass this from a
+   * caller that never reads squad44Status.
+   *
+   * In particular NEVER pass it from getGameStatusNow/getGameStatusQueued — they use a
+   * populated squad44Status as their cache-hit signal, so skipping it would turn every
+   * call into a Steam GetOwnedGames request plus a D1 and KV write.
+   */
+  skipGameStatus?: boolean;
+}
+
+export async function getSteamProfiles(
+  steamIds: string[],
+  env: Env,
+  options: GetSteamProfilesOptions = {},
+): Promise<SteamProfile[]> {
+  const { resolved: fromKV, remaining: afterKV } = await resolveFromKV(steamIds, env.STEAM_PROFILE_CACHE, options.skipGameStatus);
 
   let fromDB: SteamProfile[] = [];
   let afterDB = afterKV;
