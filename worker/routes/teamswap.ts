@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { requireAuth } from './auth';
 import { sendRconCommand } from '../lib/rcon';
 import { getGameStatusNow, getSteamProfiles } from '../lib/steam';
-import { getActiveGameServer, type GameServer } from '../lib/strapi';
+import { getActiveGameServer, getAdminPermissions, type GameServer } from '../lib/strapi';
 import type { ClaimBroadcastMessage } from '../lib/broadcast';
 import { getRoster, isWithinRosterWindow } from '../lib/roster';
 import type { TeamSwapBlock } from '../../shared/types';
@@ -89,6 +89,19 @@ const BLOCK_MESSAGE: Record<NonNullable<TeamSwapBlock>, string> = {
   not_on_server: '你当前不在服务器内，请先进入服务器再发起换边',
 };
 
+/**
+ * Whether this player is exempt from the cooldown and the in-server requirement.
+ *
+ * Gated on canRcon specifically, not merely "is an admin": anyone with that permission
+ * can already issue AdminForceTeamChange straight from the admin panel, so the
+ * exemption grants nothing they did not already have. Gating on admin-ness in general
+ * would hand a brand new capability to, say, a vote manager.
+ */
+async function hasRconPrivilege(steamId: string, env: Env): Promise<boolean> {
+  const permissions = await getAdminPermissions(steamId, env);
+  return permissions !== null && 'canRcon' in permissions;
+}
+
 async function checkPlaytime(steamId: string, env: Env): Promise<PlaytimeCheck> {
   const statusMap = await getGameStatusNow([steamId], env);
   const minutes = statusMap[steamId]?.playtime_forever ?? null;
@@ -134,12 +147,19 @@ async function broadcastAndForceTeamChange(
 teamSwap.get('/', requireAuth, async c => {
   const myId = c.get('steamid');
 
-  const [cooldownSeconds, playtime, blocked, listResult] = await Promise.all([
+  const [rawCooldown, playtime, rawBlocked, isAdmin, listResult] = await Promise.all([
     getCooldownSeconds(myId, c.env),
     checkPlaytime(myId, c.env),
     checkAvailability(myId, c.env),
+    hasRconPrivilege(myId, c.env),
     c.env.STEAM_PROFILE_CACHE.list({ prefix: 'ts:req:' }),
   ]);
+
+  // Report the effective values rather than the raw ones, so the client never has to
+  // reimplement the exemption rules — and can never disagree with the server about
+  // them. isAdmin exists only to explain the difference in the UI.
+  const cooldownSeconds = isAdmin ? 0 : rawCooldown;
+  const blocked = isAdmin ? null : rawBlocked;
 
   const reqKeys = listResult.keys.map(k => k.name);
 
@@ -181,6 +201,7 @@ teamSwap.get('/', requireAuth, async c => {
     hoursKnown: playtime.known,
     blocked,
     blockedMessage: blocked ? BLOCK_MESSAGE[blocked] : null,
+    isAdmin,
     myPending,
     requests,
   });
@@ -200,17 +221,20 @@ teamSwap.post('/', requireAuth, async c => {
     return c.json({ error: 'RCON is not configured' }, 503);
   }
 
-  // Nothing here works for someone who is not in the game — AdminForceTeamChange would
-  // target a player the server does not have. Checked before the cooldown so the
-  // message says the useful thing rather than "you are on cooldown".
-  const block = await checkAvailability(myId, c.env);
-  if (block) return c.json({ error: BLOCK_MESSAGE[block], blocked: block }, 409);
+  const isAdmin = await hasRconPrivilege(myId, c.env);
 
-  // The cooldown applies to everyone, so it is checked before the paths diverge.
-  // Re-checked server-side on every submit: the client's countdown is display only.
-  const myCooldown = await getCooldownSeconds(myId, c.env);
-  if (myCooldown > 0) {
-    return c.json({ error: '你仍在冷却中', cooldownSeconds: myCooldown }, 429);
+  if (!isAdmin) {
+    // Nothing here works for someone who is not in the game — AdminForceTeamChange
+    // would target a player the server does not have. Checked before the cooldown so
+    // the message says the useful thing rather than "you are on cooldown".
+    const block = await checkAvailability(myId, c.env);
+    if (block) return c.json({ error: BLOCK_MESSAGE[block], blocked: block }, 409);
+
+    // Re-checked server-side on every submit: the client's countdown is display only.
+    const myCooldown = await getCooldownSeconds(myId, c.env);
+    if (myCooldown > 0) {
+      return c.json({ error: '你仍在冷却中', cooldownSeconds: myCooldown }, 429);
+    }
   }
 
   // Low-hours path: no partner and no matching, but still rate limited.
@@ -224,9 +248,10 @@ teamSwap.post('/', requireAuth, async c => {
     // cannot later match someone who is still waiting on it.
     await Promise.all([
       c.env.STEAM_PROFILE_CACHE.delete(`ts:req:${myId}`),
-      startCooldown(myId, c.env),
+      // Setting a cooldown an admin does not obey would only make the UI lie to them.
+      ...(isAdmin ? [] : [startCooldown(myId, c.env)]),
     ]);
-    return c.json({ status: 'changed', changedSteamId: myId, reason: 'low_hours', cooldownSeconds: COOLDOWN_SECONDS });
+    return c.json({ status: 'changed', changedSteamId: myId, reason: 'low_hours', cooldownSeconds: isAdmin ? 0 : COOLDOWN_SECONDS });
   }
 
   const body = await c.req.json<{ targetSteamId?: string }>().catch((): { targetSteamId?: string } => ({}));
@@ -244,9 +269,14 @@ teamSwap.post('/', requireAuth, async c => {
       return c.json({ error: '该请求不是发给你的' }, 403);
     }
 
-    const targetCooldown = await getCooldownSeconds(targetId, c.env);
-    if (targetCooldown > 0) {
-      return c.json({ error: '对方仍在冷却中', cooldownSeconds: targetCooldown }, 429);
+    // The exemption is symmetric: an admin on the other side of the match is not a
+    // reason to refuse, and must not have a cooldown spent on them below.
+    const targetIsAdmin = await hasRconPrivilege(targetId, c.env);
+    if (!targetIsAdmin) {
+      const targetCooldown = await getCooldownSeconds(targetId, c.env);
+      if (targetCooldown > 0) {
+        return c.json({ error: '对方仍在冷却中', cooldownSeconds: targetCooldown }, 429);
+      }
     }
 
     const changedId = Math.random() < 0.5 ? myId : targetId;
@@ -256,15 +286,16 @@ teamSwap.post('/', requireAuth, async c => {
       return c.json({ error: err instanceof Error ? err.message : '换队失败' }, 500);
     }
 
-    // Both sides spend the jump, matching the previous daily-quota behaviour.
+    // Both sides spend the jump, matching the previous daily-quota behaviour — except
+    // admins, who are exempt on whichever side they are on.
     await Promise.all([
       c.env.STEAM_PROFILE_CACHE.delete(`ts:req:${targetId}`),
       c.env.STEAM_PROFILE_CACHE.delete(`ts:req:${myId}`),
-      startCooldown(myId, c.env),
-      startCooldown(targetId, c.env),
+      ...(isAdmin ? [] : [startCooldown(myId, c.env)]),
+      ...(targetIsAdmin ? [] : [startCooldown(targetId, c.env)]),
     ]);
 
-    return c.json({ status: 'changed', changedSteamId: changedId, reason: 'matched', cooldownSeconds: COOLDOWN_SECONDS });
+    return c.json({ status: 'changed', changedSteamId: changedId, reason: 'matched', cooldownSeconds: isAdmin ? 0 : COOLDOWN_SECONDS });
   }
 
   // A low-hours target jumps solo and will never send a matching request back, so
@@ -281,8 +312,15 @@ teamSwap.post('/', requireAuth, async c => {
   // requester: AdminBroadcast is a full-screen popup for everyone on the server, and
   // without this a cancel/re-claim loop would spam it. The window matches the pending
   // request TTL, so one announcement per request cycle.
-  if (!(await c.env.STEAM_PROFILE_CACHE.get(broadcastCooldownKey(myId)))) {
-    await c.env.STEAM_PROFILE_CACHE.put(broadcastCooldownKey(myId), '1', { expirationTtl: BROADCAST_COOLDOWN_SECONDS });
+  //
+  // canRcon holders are exempt, for the same reason as the other exemptions: they can
+  // already send AdminBroadcast straight from the admin panel, so the window stops
+  // nothing and only gets in their way. No key is written for them either — nothing
+  // reads it, and KV writes are the scarcest quota here.
+  if (isAdmin || !(await c.env.STEAM_PROFILE_CACHE.get(broadcastCooldownKey(myId)))) {
+    if (!isAdmin) {
+      await c.env.STEAM_PROFILE_CACHE.put(broadcastCooldownKey(myId), '1', { expirationTtl: BROADCAST_COOLDOWN_SECONDS });
+    }
     // Queued rather than sent inline so the response does not wait on RCON, and so
     // concurrent claims serialise behind the consumer's max_concurrency of 1.
     c.executionCtx.waitUntil(

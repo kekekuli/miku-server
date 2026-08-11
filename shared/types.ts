@@ -117,6 +117,12 @@ export interface TeamSwapStatus {
   blocked: TeamSwapBlock;
   /** Ready-to-display reason for `blocked`, or null. Keeps wording server-side. */
   blockedMessage: string | null;
+  /**
+   * Holder of the canRcon permission, exempt from the cooldown and the in-server
+   * requirement. `cooldownSeconds` and `blocked` already account for this — the flag
+   * is here only so the UI can say why they differ.
+   */
+  isAdmin: boolean;
   myPending: boolean;
   requests: TeamSwapRequest[];
 }

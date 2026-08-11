@@ -51,6 +51,27 @@ const QuotaBadge = styled.span<{ $used: boolean }>`
   border: 1px solid ${p => p.$used ? 'rgba(255,80,80,0.3)' : 'rgba(100,200,100,0.3)'};
 `;
 
+const AdminBadge = styled.span`
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: rgba(180, 120, 220, 0.15);
+  color: #c79ae0;
+  border: 1px solid rgba(180, 120, 220, 0.35);
+`;
+
+const AdminNotice = styled.div`
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #c79ae0;
+  background: rgba(180, 120, 220, 0.08);
+  border: 1px solid rgba(180, 120, 220, 0.25);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+`;
+
 const Notice = styled.div`
   font-size: 0.82rem;
   color: #8f98a0;
@@ -359,7 +380,10 @@ export default function TeamSwapPage() {
 
   const lowHours = status?.lowHours ?? false;
   // Server-decided; the wording comes with it so the two can never disagree.
+  // For admins the server already reports blocked: null and cooldownSeconds: 0, so
+  // nothing below needs to special-case them — isAdmin only drives the labelling.
   const blocked = status?.blocked ?? null;
+  const isAdmin = status?.isAdmin ?? false;
   // Resync with the server the moment the timer runs out — the local tick is only
   // an estimate, and the server is the authority on whether the jump is allowed.
   const cooldown = useCountdown(localCooldown ?? status?.cooldownSeconds ?? 0, () => void refetch());
@@ -412,13 +436,25 @@ export default function TeamSwapPage() {
           <SectionTitle>自助跳边</SectionTitle>
           {!isLoading && status && (
             <Flex align="center" gap="2">
-              <Text size="1" color="gray">{onCooldown ? '冷却中' : '状态'}</Text>
-              <QuotaBadge $used={onCooldown}>
-                {onCooldown ? formatCountdown(cooldown) : lowHours ? '可跳边' : '可熟人认领'}
-              </QuotaBadge>
+              {isAdmin ? (
+                <AdminBadge>管理员 · 不受限制</AdminBadge>
+              ) : (
+                <>
+                  <Text size="1" color="gray">{onCooldown ? '冷却中' : '状态'}</Text>
+                  <QuotaBadge $used={onCooldown}>
+                    {onCooldown ? formatCountdown(cooldown) : lowHours ? '可跳边' : '可熟人认领'}
+                  </QuotaBadge>
+                </>
+              )}
             </Flex>
           )}
         </Flex>
+
+        {isAdmin && (
+          <AdminNotice>
+            你拥有 RCON 权限，不受 30 分钟冷却和「必须在服务器内」的限制。普通玩家仍受这两项约束。
+          </AdminNotice>
+        )}
 
         {lowHours ? (
           <>
