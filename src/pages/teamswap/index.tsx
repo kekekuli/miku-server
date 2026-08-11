@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { Button, Flex, Text, TextField, Tooltip } from '@radix-ui/themes';
 import {
@@ -205,6 +205,44 @@ function PlayerChip({ player }: { player: TeamSwapRequest['requester'] }) {
   );
 }
 
+function formatCountdown(seconds: number): string {
+  const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
+  const ss = String(seconds % 60).padStart(2, '0');
+  return `${mm}:${ss}`;
+}
+
+/**
+ * Anchors on the server's remaining seconds and ticks down locally, so the page
+ * needs a single read rather than repeated polling. Re-anchors whenever the server
+ * value changes, and calls onExpire once it reaches zero so the caller can resync.
+ *
+ * Display only — the server re-checks the cooldown on every submit.
+ */
+function useCountdown(seconds: number, onExpire?: () => void): number {
+  const [remaining, setRemaining] = useState(seconds);
+  const expireRef = useRef(onExpire);
+  expireRef.current = onExpire;
+
+  useEffect(() => {
+    setRemaining(seconds);
+    if (seconds <= 0) return;
+
+    const timer = setInterval(() => {
+      setRemaining(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          expireRef.current?.();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [seconds]);
+
+  return remaining;
+}
+
 function formatAge(seconds: number): string {
   if (seconds < 60) return `${seconds} 秒前`;
   const minutes = Math.floor(seconds / 60);
@@ -309,16 +347,26 @@ type FeedbackState =
 export default function TeamSwapPage() {
   const { data: me } = useGetMeQuery();
   const myId = me?.steamId;
-  const { data: status, isLoading } = useGetTeamSwapStatusQuery();
+  const { data: status, isLoading, refetch } = useGetTeamSwapStatusQuery();
   const [sendTeamSwap, { isLoading: isSending }] = useSendTeamSwapMutation();
   const [cancelTeamSwap, { isLoading: isCancelling }] = useCancelTeamSwapMutation();
 
   const [input, setInput] = useState('');
   const [feedback, setFeedback] = useState<FeedbackState>(null);
+  // Set locally on a successful jump so the countdown starts immediately, without
+  // waiting for the refetch to come back.
+  const [localCooldown, setLocalCooldown] = useState<number | null>(null);
 
-  const submit = async (targetSteamId: string) => {
-    const id = targetSteamId.trim();
-    if (!id) return;
+  const lowHours = status?.lowHours ?? false;
+  // Resync with the server the moment the timer runs out — the local tick is only
+  // an estimate, and the server is the authority on whether the jump is allowed.
+  const cooldown = useCountdown(localCooldown ?? status?.cooldownSeconds ?? 0, () => void refetch());
+  const onCooldown = cooldown > 0;
+
+  const submit = async (targetSteamId?: string) => {
+    const id = targetSteamId?.trim();
+    // Only low-hours players may submit without naming a target.
+    if (!id && !lowHours) return;
 
     setFeedback(null);
     const result = await sendTeamSwap(id);
@@ -335,6 +383,7 @@ export default function TeamSwapPage() {
       const suffix = data.reason === 'low_hours' ? '（游戏时间不足200小时）' : '';
       setFeedback({ type: 'success', message: `已强制换队 ${who} ${suffix}`.trim() });
       setInput('');
+      if (data.cooldownSeconds > 0) setLocalCooldown(data.cooldownSeconds);
     } else {
       setFeedback({ type: 'pending', message: data.message });
       setInput('');
@@ -361,42 +410,70 @@ export default function TeamSwapPage() {
           <SectionTitle>自助跳边</SectionTitle>
           {!isLoading && status && (
             <Flex align="center" gap="2">
-              <Text size="1" color="gray">今日剩余</Text>
-              <QuotaBadge $used={status.usedToday}>
-                {status.usedToday ? '0' : '1'} / 1
+              <Text size="1" color="gray">{onCooldown ? '冷却中' : '状态'}</Text>
+              <QuotaBadge $used={onCooldown}>
+                {onCooldown ? formatCountdown(cooldown) : lowHours ? '可跳边' : '可熟人认领'}
               </QuotaBadge>
             </Flex>
           )}
         </Flex>
 
-        <Notice>
-          输入对方 Steam ID 发送请求，若对方已有待匹配请求且双方都有今日剩余次数，则立即随机挑一人换队并扣除双方今日剩余次数，否则等待对方响应（5分钟有效）（200小时以下无限制）。
-        </Notice>
-        <Warning>禁止在打乱后的对局或开局5分钟后使用此功能，否则将面临封禁(200小时以下无限制)</Warning>
-        <Warning>此功能会随机挑一人换边</Warning>
+        {lowHours ? (
+          <>
+            <Notice>
+              你的游戏时长不足 200 小时，无需对方确认，点击下方按钮即可立即换边。每次换边后进入 30 分钟冷却。
+            </Notice>
+            <Warning>禁止在打乱后的对局或开局5分钟后使用此功能，否则将面临封禁</Warning>
 
-        <form onSubmit={handleSubmit}>
-          <Flex gap="2" align="center">
-            <TextField.Root
-              placeholder="输入对方 Steam ID"
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              style={{ flex: 1 }}
-            />
-            <Button type="submit" disabled={busy || !input.trim()}>
-              发送请求
+            <Button size="3" disabled={busy || onCooldown} onClick={() => void submit()}>
+              {onCooldown ? `冷却中 ${formatCountdown(cooldown)}` : '一键跳边'}
             </Button>
-          </Flex>
-        </form>
+          </>
+        ) : (
+          <>
+            <Notice>
+              在下方选择或直接输入对方 Steam ID 发送请求。双方互相发出请求后立即随机挑一人换边，随后双方各进入 30 分钟冷却；未匹配的请求 5 分钟内有效。
+            </Notice>
+            {/* Without this, a player with a private profile just silently loses the
+                solo-jump path and has no idea why. */}
+            {status && !status.hoursKnown && (
+              <Warning>
+                无法读取你的游戏时长（Steam 个人资料未公开，或未公开游戏详情）。无法确认时长的玩家一律按 200 小时以上处理，需与他人互相确认才能换边。
+              </Warning>
+            )}
+            <Warning>禁止在打乱后的对局或开局5分钟后使用此功能，否则将面临封禁</Warning>
+            <Warning>此功能会随机挑一人换边</Warning>
+
+            <form onSubmit={handleSubmit}>
+              <Flex gap="2" align="center">
+                <TextField.Root
+                  placeholder="输入对方 Steam ID"
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+                <Button type="submit" disabled={busy || onCooldown || !input.trim()}>
+                  发送请求
+                </Button>
+              </Flex>
+            </form>
+
+            {onCooldown && (
+              <Notice>冷却剩余 {formatCountdown(cooldown)}，结束后即可再次跳边。</Notice>
+            )}
+          </>
+        )}
 
         {feedback && (
           <ResultBanner $type={feedback.type}>{feedback.message}</ResultBanner>
         )}
       </Section>
 
-      <RosterPicker myId={myId} selectedId={input.trim()} onSelect={setInput} />
+      {/* Low-hours players jump solo, so they have no target to pick. */}
+      {!lowHours && <RosterPicker myId={myId} selectedId={input.trim()} onSelect={setInput} />}
 
-      {!isLoading && (
+      {/* Low-hours players never queue or match, so the list is not actionable for them. */}
+      {!isLoading && !lowHours && (
         <Section>
           <Flex justify="between" align="center">
             <SectionTitle>等待匹配 ({requests.length})</SectionTitle>
@@ -430,11 +507,15 @@ export default function TeamSwapPage() {
                     {isMine ? (
                       <MyLabel>我的请求</MyLabel>
                     ) : (
-                      <Tooltip content={req.target?.steamId !== myId ? '只有被请求的玩家才能匹配' : undefined}>
+                      <Tooltip content={
+                        req.target?.steamId !== myId ? '只有被请求的玩家才能匹配'
+                          : onCooldown ? `冷却中，剩余 ${formatCountdown(cooldown)}`
+                            : undefined
+                      }>
                         <Button
                           size="1"
                           variant="soft"
-                          disabled={busy || req.target?.steamId !== myId}
+                          disabled={busy || onCooldown || req.target?.steamId !== myId}
                           onClick={() => void submit(req.requester.steamId)}
                         >
                           立即匹配

@@ -79,11 +79,25 @@ export interface TeamSwapRequest {
 }
 
 export interface TeamSwapStatus {
-  usedToday: boolean;
+  /** Seconds until this player may jump again. 0 means ready now. */
+  cooldownSeconds: number;
+  /** Under the playtime threshold: may jump solo, without a partner. */
+  lowHours: boolean;
+  /**
+   * False when playtime could not be read — a private Steam profile, or Steam being
+   * unreachable. Such players are treated as normal, never as low-hours.
+   */
+  hoursKnown: boolean;
   myPending: boolean;
   requests: TeamSwapRequest[];
 }
 
 export type TeamSwapResult =
-  | { status: 'changed'; changedSteamId: string; reason: 'low_hours' | 'matched' }
+  | {
+    status: 'changed';
+    changedSteamId: string;
+    reason: 'low_hours' | 'matched';
+    /** Cooldown to start counting from now. 0 for low-hours players. */
+    cooldownSeconds: number;
+  }
   | { status: 'pending'; message: string };

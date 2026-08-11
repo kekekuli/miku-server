@@ -82,11 +82,12 @@ export const api = createApi({
       query: () => 'api/team-swap',
       providesTags: ['TeamSwap'],
     }),
-    sendTeamSwap: builder.mutation<TeamSwapResult, string>({
+    // Low-hours players jump solo and send no target; everyone else names one.
+    sendTeamSwap: builder.mutation<TeamSwapResult, string | undefined>({
       query: targetSteamId => ({
         url: 'api/team-swap',
         method: 'POST',
-        body: { targetSteamId },
+        body: targetSteamId ? { targetSteamId } : {},
       }),
       invalidatesTags: ['TeamSwap'],
     }),
