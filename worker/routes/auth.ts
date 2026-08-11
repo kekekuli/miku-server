@@ -6,6 +6,11 @@ import type { Variables } from '../types';
 
 const STEAM_OPENID_URL = 'https://steamcommunity.com/openid/login';
 
+// `Secure` is rejected by browsers over plain HTTP unless the origin is localhost,
+// which would drop the cookie when the dev server is reached over a LAN/Tailscale IP.
+const cookieAttrs = (url: URL) =>
+  `Path=/; SameSite=Lax; HttpOnly${url.protocol === 'https:' ? '; Secure' : ''}`;
+
 export const requireAuth = createMiddleware<{ Bindings: Env; Variables: Variables }>(async (c, next) => {
   const token = parseCookie(c.req.header('Cookie') ?? '')['token'];
   if (!token) return c.text('Unauthorized', 401);
@@ -52,7 +57,7 @@ auth.get('/steam/callback', async c => {
       status: 302,
       headers: {
         Location: origin,
-        'Set-Cookie': `token=${token}; Path=/; SameSite=Lax; Secure; HttpOnly`,
+        'Set-Cookie': `token=${token}; ${cookieAttrs(url)}`,
       },
     });
   } catch {
@@ -67,7 +72,7 @@ auth.get('/logout', c => {
     status: 302,
     headers: {
       Location: origin,
-      'Set-Cookie': 'token=; Path=/; Max-Age=0; SameSite=Lax; Secure; HttpOnly',
+      'Set-Cookie': `token=; Max-Age=0; ${cookieAttrs(url)}`,
     },
   });
 });

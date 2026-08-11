@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler types && vite",
+    "dev": "wrangler types && vite --host",
     "build": "vite build",
     "deploy": "vite build && wrangler deploy",
     "lint": "eslint src worker",
