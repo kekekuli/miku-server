@@ -175,6 +175,7 @@ export async function getVoteGate(type: 'vote' | 'candidate', env: Env): Promise
 }
 
 export interface GameServer {
+  documentId: string;
   displayName: string;
   rconHost: string;
   rconPort: number;
@@ -201,7 +202,7 @@ export interface GameServerOption {
 }
 
 export async function listRconGameServers(env: Env): Promise<GameServerOption[]> {
-  const servers = await strapi(env).find<GameServer & { documentId: string }>('game-servers', {
+  const servers = await strapi(env).find<GameServer>('game-servers', {
     cacheTtl: 60,
   });
   return servers

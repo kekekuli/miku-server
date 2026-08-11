@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { getSteamProfiles, getGameStatusNow, getGameStatusQueued } from '../lib/steam';
 import { getFilterConditions } from '../lib/strapi';
+import { getRoster } from '../lib/roster';
 import { evaluate } from '../lib/evaluate';
 import type { EvalContext } from '../lib/evaluate';
 import type { EligibilityRequest } from '../../shared/types';
@@ -29,6 +30,14 @@ api.get('/game-status/:steamId', async c => {
   if (!profile) return c.json(null, 404);
   const statuses = await getGameStatusNow([steamId], c.env);
   return c.json(statuses[steamId] ?? null);
+});
+
+// Served entirely from D1 — never triggers an RCON call, so the load on the game
+// server stays flat at one ListPlayers per minute regardless of traffic.
+api.get('/roster', async c => {
+  const roster = await getRoster(c.env);
+  if (!roster) return c.json(null, 404);
+  return c.json(roster);
 });
 
 api.get('/filter-conditions', async c => {

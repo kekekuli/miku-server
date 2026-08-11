@@ -6,6 +6,7 @@ import {
   useSendTeamSwapMutation,
   useCancelTeamSwapMutation,
   useGetMeQuery,
+  useGetRosterQuery,
 } from '../../lib/api';
 import type { TeamSwapRequest } from '../../../shared/types';
 
@@ -127,6 +128,68 @@ const Spacer = styled.div`
   flex: 1;
 `;
 
+const RosterList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 320px;
+  overflow-y: auto;
+`;
+
+const RosterRow = styled.button<{ $selected: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: ${p => p.$selected ? 'rgba(74, 107, 165, 0.3)' : '#1b2838'};
+  border: 1px solid ${p => p.$selected ? 'rgba(74, 107, 165, 0.6)' : 'transparent'};
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+
+  &:hover:not(:disabled) {
+    background: ${p => p.$selected ? 'rgba(74, 107, 165, 0.35)' : '#22384d'};
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+`;
+
+// Shown when a player has no resolvable Steam profile, so the row still lines up
+// with the avatars above and below it.
+const AvatarFallback = styled.div`
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  background: #2a475e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  color: #8f98a0;
+`;
+
+const RosterNames = styled.div`
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0.1rem;
+`;
+
+const SubText = styled.span`
+  font-size: 0.72rem;
+  color: #8f98a0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
 const MyLabel = styled.span`
   font-size: 0.72rem;
   color: #8f98a0;
@@ -139,6 +202,101 @@ function PlayerChip({ player }: { player: TeamSwapRequest['requester'] }) {
       <Avatar src={player.avatar} alt={player.name} />
       <PlayerName>{player.name}</PlayerName>
     </PlayerCell>
+  );
+}
+
+function formatAge(seconds: number): string {
+  if (seconds < 60) return `${seconds} 秒前`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} 分钟前`;
+  return `${Math.floor(minutes / 60)} 小时前`;
+}
+
+function RosterPicker({ myId, selectedId, onSelect }: {
+  myId: string | undefined;
+  selectedId: string;
+  onSelect: (steamId: string) => void;
+}) {
+  const { data: roster, isFetching, refetch } = useGetRosterQuery();
+  const [search, setSearch] = useState('');
+
+  const players = roster?.players ?? [];
+  const query = search.trim().toLowerCase();
+  // Match on either name the player might be known by, plus the raw ID, since a
+  // player's in-game name and Steam persona name often differ.
+  const filtered = query
+    ? players.filter(p =>
+      p.name.toLowerCase().includes(query) ||
+      (p.steamName?.toLowerCase().includes(query) ?? false) ||
+      p.steamId.includes(query))
+    : players;
+
+  return (
+    <Section>
+      <Flex justify="between" align="center">
+        <SectionTitle>在线玩家 ({roster?.playerCount ?? 0})</SectionTitle>
+        <Flex align="center" gap="2">
+          {roster && <Text size="1" color="gray">{formatAge(roster.ageSeconds)}更新</Text>}
+          <Button size="1" variant="ghost" disabled={isFetching} onClick={() => void refetch()}>
+            刷新
+          </Button>
+        </Flex>
+      </Flex>
+
+      {roster && !roster.parseOk && (
+        <Warning>名单解析失败，以下为最后一次成功获取的结果，可能已过期。</Warning>
+      )}
+
+      {!roster ? (
+        <Text size="2" color="gray">{isFetching ? '加载中…' : '暂无在线名单'}</Text>
+      ) : (
+        <>
+          <TextField.Root
+            placeholder="搜索名字或 Steam ID"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+
+          {filtered.length === 0 ? (
+            <Text size="2" color="gray">
+              {players.length === 0 ? '服务器当前无玩家' : '没有匹配的玩家'}
+            </Text>
+          ) : (
+            <RosterList>
+              {filtered.map(p => {
+                const isMe = p.steamId === myId;
+                return (
+                  <RosterRow
+                    key={p.steamId}
+                    type="button"
+                    $selected={p.steamId === selectedId}
+                    disabled={isMe}
+                    title={p.steamId}
+                    onClick={() => onSelect(p.steamId)}
+                  >
+                    {p.avatar
+                      ? <Avatar src={p.avatar} alt={p.name} />
+                      : <AvatarFallback>?</AvatarFallback>}
+                    <RosterNames>
+                      <PlayerName>{p.name || p.steamName || p.steamId}</PlayerName>
+                      {/* Fall back to the raw ID when there is no profile, so the row
+                          is still actionable without a Steam name or avatar. */}
+                      <SubText>{p.steamName ?? p.steamId}</SubText>
+                    </RosterNames>
+                    <Spacer />
+                    {isMe && <MyLabel>我</MyLabel>}
+                  </RosterRow>
+                );
+              })}
+            </RosterList>
+          )}
+
+          {roster.connectingCount > 0 && (
+            <Text size="1" color="gray">另有 {roster.connectingCount} 名玩家正在进入服务器</Text>
+          )}
+        </>
+      )}
+    </Section>
   );
 }
 
@@ -235,6 +393,8 @@ export default function TeamSwapPage() {
           <ResultBanner $type={feedback.type}>{feedback.message}</ResultBanner>
         )}
       </Section>
+
+      <RosterPicker myId={myId} selectedId={input.trim()} onSelect={setInput} />
 
       {!isLoading && (
         <Section>

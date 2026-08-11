@@ -39,7 +39,11 @@
     }
   ],
   "triggers": {
-    "crons": ["0 19 * * *"]
+    // "0 19 * * *" — daily Steam game-status refresh for top candidates
+    // "* * * * *"  — roster poll (ListPlayers) for the active game server;
+    //                one minute is the finest granularity Cloudflare cron allows.
+    //                Keep this string in sync with ROSTER_CRON in worker/index.ts.
+    "crons": ["0 19 * * *", "* * * * *"]
   },
   "queues": {
     "producers": [

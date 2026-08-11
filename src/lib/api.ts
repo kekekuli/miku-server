@@ -1,5 +1,5 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import type { SteamProfile, VotesResponse, AdminMe, GameStatus, EligibilityRequest, EligibilityResponse, ConditionLabel, TeamSwapStatus, TeamSwapResult, GameServerOption } from '../../shared/types';
+import type { SteamProfile, VotesResponse, AdminMe, GameStatus, EligibilityRequest, EligibilityResponse, ConditionLabel, TeamSwapStatus, TeamSwapResult, GameServerOption, RosterResponse } from '../../shared/types';
 
 export const api = createApi({
   reducerPath: 'api',
@@ -72,6 +72,12 @@ export const api = createApi({
         body
       })
     }),
+    // Reads a snapshot polled by cron — never triggers an RCON call, so refetching
+    // is cheap for the game server. Not polled automatically; refetched on mount and
+    // when the user presses refresh.
+    getRoster: builder.query<RosterResponse | null, void>({
+      query: () => 'api/roster',
+    }),
     getTeamSwapStatus: builder.query<TeamSwapStatus, void>({
       query: () => 'api/team-swap',
       providesTags: ['TeamSwap'],
@@ -106,6 +112,7 @@ export const {
   useDeleteCandidateMutation,
   useGetFilterConditionQuery,
   useGetEligibilityQuery,
+  useGetRosterQuery,
   useGetTeamSwapStatusQuery,
   useSendTeamSwapMutation,
   useCancelTeamSwapMutation,

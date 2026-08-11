@@ -47,6 +47,32 @@ export interface ConditionLabel {
 export type EligibilityRequest = { steamId: string; conditionKeys: string[] }[];
 export type EligibilityResponse = { steamId: string; conditions: EligibilityResult[]; noGameStatus: boolean }[];
 
+export interface RosterPlayer {
+  steamId: string;
+  /** In-game name from RCON — not the Steam persona name, and truncated by the server. */
+  name: string;
+}
+
+/** A roster player enriched with their Steam profile, where one could be resolved. */
+export interface RosterEntry extends RosterPlayer {
+  /** Steam persona name. Null when the profile could not be resolved. */
+  steamName: string | null;
+  /** Null when the profile could not be resolved — render a placeholder. */
+  avatar: string | null;
+}
+
+export interface RosterResponse {
+  players: RosterEntry[];
+  playerCount: number;
+  connectingCount: number;
+  /** Epoch ms of the last successful poll. */
+  fetchedAt: number;
+  /** Seconds since fetchedAt, so the UI can show staleness without clock skew. */
+  ageSeconds: number;
+  /** False when the last poll could not be parsed — the list may be stale or empty. */
+  parseOk: boolean;
+}
+
 export interface TeamSwapRequest {
   requester: Pick<SteamProfile, 'steamId' | 'name' | 'avatar'>;
   target: Pick<SteamProfile, 'steamId' | 'name' | 'avatar'> | null;

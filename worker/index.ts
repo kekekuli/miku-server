@@ -6,9 +6,14 @@ import api from './routes/api';
 import admin from './routes/admin';
 import files from './routes/files';
 import { executeGameStatusRefresh, getGameStatusQueued } from './lib/steam';
+import { pollRoster } from './lib/roster';
 import { candidates, votes } from '../db/schema';
 import { openobserve } from './lib/openobserve';
 import type { Variables } from './types';
+
+// Must match the expression in wrangler.jsonc `triggers.crons` exactly — that string
+// is how Cloudflare tells the two schedules apart in the scheduled handler.
+const ROSTER_CRON = '* * * * *';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -26,7 +31,9 @@ app.all('*', c => {
 
 export default {
   fetch: app.fetch,
-  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+  async scheduled(controller: ScheduledController, env: Env): Promise<void> {
+    if (controller.cron === ROSTER_CRON) return pollRoster(env);
+
     const db = drizzle(env.DB);
     const rows = await db
       .select({ steamId: candidates.steamId, voteCount: count(votes.voterId) })

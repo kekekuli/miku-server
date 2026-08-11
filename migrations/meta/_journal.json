@@ -57,6 +57,13 @@
       "when": 1786414841263,
       "tag": "0007_add_steam_game_status",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1786431722084,
+      "tag": "0008_add_server_roster",
+      "breakpoints": true
     }
   ]
 }

@@ -24,12 +24,19 @@ class PacketReader {
   constructor(private reader: ReadableStreamDefaultReader<Uint8Array>) {}
 
   private async readChunk(): Promise<Uint8Array> {
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('RCON timeout')), TIMEOUT_MS)
-    );
-    const result = await Promise.race([this.reader.read(), timeout]);
-    if (result.done) throw new Error('RCON connection closed unexpectedly');
-    return result.value;
+    // The timer must be cleared on the happy path: a pending timer keeps the
+    // isolate alive after the command has finished.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('RCON timeout')), TIMEOUT_MS);
+      });
+      const result = await Promise.race([this.reader.read(), timeout]);
+      if (result.done) throw new Error('RCON connection closed unexpectedly');
+      return result.value;
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
   }
 
   private async ensureBytes(n: number): Promise<void> {
@@ -42,7 +49,12 @@ class PacketReader {
     }
   }
 
-  async readPacket(): Promise<{ id: number; type: number; body: string }> {
+  // The body is returned as raw bytes, NOT decoded here. A response larger than
+  // ~4096 bytes is split across several packets, and the split can land in the
+  // middle of a multi-byte UTF-8 sequence — decoding per packet would corrupt any
+  // non-ASCII name straddling the boundary. The caller concatenates first, then
+  // decodes once.
+  async readPacket(): Promise<{ id: number; type: number; body: Uint8Array }> {
     await this.ensureBytes(4);
     const size = new DataView(this.buf.buffer).getInt32(0, true);
 
@@ -51,7 +63,7 @@ class PacketReader {
     const id = dv.getInt32(4, true);
     const type = dv.getInt32(8, true);
     // body is between offset 12 and (4 + size - 2), stripping two trailing null bytes
-    const body = new TextDecoder().decode(this.buf.slice(12, 4 + size - 2));
+    const body = this.buf.slice(12, 4 + size - 2);
 
     this.buf = this.buf.slice(4 + size);
     return { id, type, body };
@@ -89,7 +101,7 @@ export async function sendRconCommand(
     await writer.write(buildPacket(2, TYPE_EXEC, command));
     await writer.write(buildPacket(3, TYPE_EXEC, ''));
 
-    const parts: string[] = [];
+    const parts: Uint8Array[] = [];
     while (true) {
       const p = await reader.readPacket();
       if (p.type !== TYPE_RESPONSE) continue;
@@ -97,7 +109,15 @@ export async function sendRconCommand(
       if (p.id === 2) parts.push(p.body);
     }
 
-    return parts.join('');
+    // Concatenate every fragment before decoding, so a multi-byte UTF-8 character
+    // split across a packet boundary is reassembled intact.
+    const merged = new Uint8Array(parts.reduce((n, part) => n + part.length, 0));
+    let offset = 0;
+    for (const part of parts) {
+      merged.set(part, offset);
+      offset += part.length;
+    }
+    return new TextDecoder().decode(merged);
   } finally {
     writer.releaseLock();
     await socket.close();
