@@ -11,6 +11,29 @@ import type { DisplayPlayer, ParsedPlayer, RosterResponse } from '../../shared/t
 const MAX_NEW_PROFILES_PER_POLL = 10;
 
 /**
+ * The roster poll schedule. Must match `triggers.crons` in wrangler.jsonc exactly —
+ * Cloudflare identifies which schedule fired by this string.
+ *
+ * Cron runs in UTC; 04:00–15:59 UTC is 12:00–23:59 CST, the hours the server is used.
+ */
+export const ROSTER_CRON = '* 4-15 * * *';
+
+const ROSTER_WINDOW_START_UTC = 4;
+const ROSTER_WINDOW_END_UTC = 16; // exclusive
+
+/**
+ * Whether the roster is being actively polled right now.
+ *
+ * Outside this window nothing refreshes the snapshot, so it can be many hours old.
+ * Anything that gates on "who is currently on the server" must check this first
+ * rather than trusting a stale roster.
+ */
+export function isWithinRosterWindow(now: Date = new Date()): boolean {
+  const hour = now.getUTCHours();
+  return hour >= ROSTER_WINDOW_START_UTC && hour < ROSTER_WINDOW_END_UTC;
+}
+
+/**
  * Polls the active game server's roster and stores it in D1.
  *
  * Called from the cron trigger, which Cloudflare invokes once globally per firing —

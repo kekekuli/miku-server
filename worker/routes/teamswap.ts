@@ -3,6 +3,9 @@ import { requireAuth } from './auth';
 import { sendRconCommand } from '../lib/rcon';
 import { getGameStatusNow, getSteamProfiles } from '../lib/steam';
 import { getActiveGameServer, type GameServer } from '../lib/strapi';
+import type { ClaimBroadcastMessage } from '../lib/broadcast';
+import { getRoster, isWithinRosterWindow } from '../lib/roster';
+import type { TeamSwapBlock } from '../../shared/types';
 import type { Variables } from '../types';
 
 const LOW_HOURS_THRESHOLD_MINUTES = 200 * 60;
@@ -10,10 +13,17 @@ const PENDING_TTL_SECONDS = 5 * 60;
 // Players at or above the threshold get one jump per window. The window does not
 // stack — this replaces the previous once-per-day quota.
 const COOLDOWN_SECONDS = 30 * 60;
+// Matches PENDING_TTL_SECONDS: one in-game announcement per pending-request lifetime.
+const BROADCAST_COOLDOWN_SECONDS = PENDING_TTL_SECONDS;
+// How stale the roster may be and still be used to decide who is on the server.
+// Generous enough to survive a few missed polls, short enough that it never gates on
+// data from outside the cron's active window.
+const ROSTER_TRUST_SECONDS = 5 * 60;
 
 const teamSwap = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 const cooldownKey = (steamId: string) => `ts:cd:${steamId}`;
+const broadcastCooldownKey = (steamId: string) => `ts:bc:${steamId}`;
 
 /**
  * Remaining cooldown in seconds, 0 when ready.
@@ -51,6 +61,34 @@ interface PlaytimeCheck {
  * hiding your profile would be the cheapest way to bypass the partner requirement.
  * This deliberately fails closed to the matched path.
  */
+/**
+ * Why team swapping is unavailable for this player, or null when it is available.
+ *
+ * Team swapping is only meaningful while the player is actually in the game, which is
+ * decided from the roster snapshot. That snapshot is only refreshed inside the poll
+ * window, so the window is checked first — outside it the data is hours old and would
+ * wrongly reject everyone.
+ */
+async function checkAvailability(steamId: string, env: Env): Promise<TeamSwapBlock> {
+  if (!isWithinRosterWindow()) return 'outside_hours';
+
+  const roster = await getRoster(env);
+  // Inside the window the roster should be at most a minute old. Anything older means
+  // the poll is failing, and gating on it would be gating on fiction — say so rather
+  // than telling players they are not on a server they are standing on.
+  if (!roster || !roster.parseOk || roster.ageSeconds > ROSTER_TRUST_SECONDS) {
+    return 'roster_unavailable';
+  }
+
+  return roster.players.some(p => p.steamId === steamId) ? null : 'not_on_server';
+}
+
+const BLOCK_MESSAGE: Record<NonNullable<TeamSwapBlock>, string> = {
+  outside_hours: '自助跳边仅在每天 12:00–24:00 开放',
+  roster_unavailable: '在线名单暂时不可用，请稍后再试',
+  not_on_server: '你当前不在服务器内，请先进入服务器再发起换边',
+};
+
 async function checkPlaytime(steamId: string, env: Env): Promise<PlaytimeCheck> {
   const statusMap = await getGameStatusNow([steamId], env);
   const minutes = statusMap[steamId]?.playtime_forever ?? null;
@@ -58,11 +96,36 @@ async function checkPlaytime(steamId: string, env: Env): Promise<PlaytimeCheck> 
   return { known: true, lowHours: minutes < LOW_HOURS_THRESHOLD_MINUTES };
 }
 
-async function broadcastAndForceTeamChange(env: Env, gameServer: GameServer, changedId: string): Promise<void> {
-  const [profile] = await getSteamProfiles([changedId], env);
-  const name = profile?.name ?? changedId;
+/**
+ * Announces the swap in game, then performs it.
+ *
+ * Sent inline rather than through the broadcast queue: the caller has to report
+ * whether the swap actually succeeded, so AdminForceTeamChange cannot be fire and
+ * forget, and there is no point serialising only half of the pair.
+ *
+ * The low-hours wording spells out the rule, otherwise everyone else on the server
+ * sees someone swap without the usual two-party confirmation and assumes it is a bug
+ * or a favour.
+ */
+async function broadcastAndForceTeamChange(
+  env: Env,
+  gameServer: GameServer,
+  changedId: string,
+  reason: 'low_hours' | 'matched',
+): Promise<void> {
+  // Prefer the in-game name, same as the claim announcements — people on the server
+  // recognise each other by scoreboard name, not Steam persona.
+  const roster = await getRoster(env);
+  const inGameName = roster?.players.find(p => p.steamId === changedId)?.name;
+  const [profile] = inGameName ? [] : await getSteamProfiles([changedId], env, { skipGameStatus: true });
+  const name = inGameName ?? profile?.name ?? changedId;
+
+  const text = reason === 'low_hours'
+    ? `[自助跳边] ${name} 时长不足200小时，免认领直接跳边（30分钟冷却）`
+    : `[自助跳边] 正在切换${name}的队伍`;
+
   // Broadcast failure is non-fatal
-  await sendRconCommand(gameServer.rconHost, gameServer.rconPort, gameServer.rconPassword, `AdminBroadcast [自助跳边] 正在切换${name}的队伍`);
+  await sendRconCommand(gameServer.rconHost, gameServer.rconPort, gameServer.rconPassword, `AdminBroadcast ${text}`);
   const result = await sendRconCommand(gameServer.rconHost, gameServer.rconPort, gameServer.rconPassword, `AdminForceTeamChange ${changedId}`);
   if (result.trimStart().startsWith('ERROR')) throw new Error(result.trim());
 }
@@ -71,9 +134,10 @@ async function broadcastAndForceTeamChange(env: Env, gameServer: GameServer, cha
 teamSwap.get('/', requireAuth, async c => {
   const myId = c.get('steamid');
 
-  const [cooldownSeconds, playtime, listResult] = await Promise.all([
+  const [cooldownSeconds, playtime, blocked, listResult] = await Promise.all([
     getCooldownSeconds(myId, c.env),
     checkPlaytime(myId, c.env),
+    checkAvailability(myId, c.env),
     c.env.STEAM_PROFILE_CACHE.list({ prefix: 'ts:req:' }),
   ]);
 
@@ -111,7 +175,15 @@ teamSwap.get('/', requireAuth, async c => {
     return [{ requester, target: e.targetId ? toInfo(e.targetId) : null }];
   });
 
-  return c.json({ cooldownSeconds, lowHours: playtime.lowHours, hoursKnown: playtime.known, myPending, requests });
+  return c.json({
+    cooldownSeconds,
+    lowHours: playtime.lowHours,
+    hoursKnown: playtime.known,
+    blocked,
+    blockedMessage: blocked ? BLOCK_MESSAGE[blocked] : null,
+    myPending,
+    requests,
+  });
 });
 
 // POST /api/team-swap
@@ -128,6 +200,12 @@ teamSwap.post('/', requireAuth, async c => {
     return c.json({ error: 'RCON is not configured' }, 503);
   }
 
+  // Nothing here works for someone who is not in the game — AdminForceTeamChange would
+  // target a player the server does not have. Checked before the cooldown so the
+  // message says the useful thing rather than "you are on cooldown".
+  const block = await checkAvailability(myId, c.env);
+  if (block) return c.json({ error: BLOCK_MESSAGE[block], blocked: block }, 409);
+
   // The cooldown applies to everyone, so it is checked before the paths diverge.
   // Re-checked server-side on every submit: the client's countdown is display only.
   const myCooldown = await getCooldownSeconds(myId, c.env);
@@ -138,7 +216,7 @@ teamSwap.post('/', requireAuth, async c => {
   // Low-hours path: no partner and no matching, but still rate limited.
   if ((await checkPlaytime(myId, c.env)).lowHours) {
     try {
-      await broadcastAndForceTeamChange(c.env, gameServer, myId);
+      await broadcastAndForceTeamChange(c.env, gameServer, myId, 'low_hours');
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : '换队失败' }, 500);
     }
@@ -173,7 +251,7 @@ teamSwap.post('/', requireAuth, async c => {
 
     const changedId = Math.random() < 0.5 ? myId : targetId;
     try {
-      await broadcastAndForceTeamChange(c.env, gameServer, changedId);
+      await broadcastAndForceTeamChange(c.env, gameServer, changedId, 'matched');
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : '换队失败' }, 500);
     }
@@ -198,6 +276,20 @@ teamSwap.post('/', requireAuth, async c => {
 
   // No match yet — queue this request, storing targetId as the value
   await c.env.STEAM_PROFILE_CACHE.put(`ts:req:${myId}`, targetId, { expirationTtl: PENDING_TTL_SECONDS });
+
+  // Announce the claim in game so the target knows to come confirm. Rate limited per
+  // requester: AdminBroadcast is a full-screen popup for everyone on the server, and
+  // without this a cancel/re-claim loop would spam it. The window matches the pending
+  // request TTL, so one announcement per request cycle.
+  if (!(await c.env.STEAM_PROFILE_CACHE.get(broadcastCooldownKey(myId)))) {
+    await c.env.STEAM_PROFILE_CACHE.put(broadcastCooldownKey(myId), '1', { expirationTtl: BROADCAST_COOLDOWN_SECONDS });
+    // Queued rather than sent inline so the response does not wait on RCON, and so
+    // concurrent claims serialise behind the consumer's max_concurrency of 1.
+    c.executionCtx.waitUntil(
+      c.env.RCON_BROADCAST_QUEUE.send({ requesterId: myId, targetId } satisfies ClaimBroadcastMessage),
+    );
+  }
+
   return c.json({ status: 'pending', message: '等待对方确认，请对方在5分钟内发出请求' });
 });
 

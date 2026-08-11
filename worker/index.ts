@@ -6,15 +6,11 @@ import api from './routes/api';
 import admin from './routes/admin';
 import files from './routes/files';
 import { executeGameStatusRefresh, getGameStatusQueued } from './lib/steam';
-import { pollRoster } from './lib/roster';
+import { pollRoster, ROSTER_CRON } from './lib/roster';
+import { handleClaimBroadcasts, RCON_BROADCAST_QUEUE, type ClaimBroadcastMessage } from './lib/broadcast';
 import { candidates, votes } from '../db/schema';
 import { openobserve } from './lib/openobserve';
 import type { Variables } from './types';
-
-// Must match the expression in wrangler.jsonc `triggers.crons` exactly — that string
-// is how Cloudflare tells the two schedules apart in the scheduled handler.
-// UTC 04:00–15:59 == CST 12:00–23:59.
-const ROSTER_CRON = '* 4-15 * * *';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -45,8 +41,17 @@ export default {
       .limit(20);
     await getGameStatusQueued(rows.map(r => r.steamId), env);
   },
-  async queue(batch: MessageBatch<{ steamId: string }>, env: Env): Promise<void> {
-    const steamIds = [...new Set(batch.messages.map(m => m.body.steamId))];
+  // Two queues share this handler, so dispatch on batch.queue before touching bodies —
+  // the message shapes are unrelated.
+  async queue(batch: MessageBatch<unknown>, env: Env): Promise<void> {
+    if (batch.queue === RCON_BROADCAST_QUEUE) {
+      const messages = (batch as MessageBatch<ClaimBroadcastMessage>).messages.map(m => m.body);
+      await handleClaimBroadcasts(messages, env);
+      batch.ackAll();
+      return;
+    }
+
+    const steamIds = [...new Set((batch as MessageBatch<{ steamId: string }>).messages.map(m => m.body.steamId))];
     await executeGameStatusRefresh(steamIds, env);
     batch.ackAll();
   },

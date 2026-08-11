@@ -94,6 +94,15 @@ export interface TeamSwapRequest {
   target: Pick<SteamProfile, 'steamId' | 'name' | 'avatar'> | null;
 }
 
+/**
+ * Why team swapping is refused right now.
+ *
+ * `outside_hours`      — outside the 12:00–24:00 CST window the roster is not polled
+ * `roster_unavailable` — inside the window but the snapshot is missing or stale
+ * `not_on_server`      — the player is simply not in the game
+ */
+export type TeamSwapBlock = 'outside_hours' | 'roster_unavailable' | 'not_on_server' | null;
+
 export interface TeamSwapStatus {
   /** Seconds until this player may jump again. 0 means ready now. */
   cooldownSeconds: number;
@@ -104,6 +113,10 @@ export interface TeamSwapStatus {
    * unreachable. Such players are treated as normal, never as low-hours.
    */
   hoursKnown: boolean;
+  /** Why team swapping is unavailable, or null when it is available. */
+  blocked: TeamSwapBlock;
+  /** Ready-to-display reason for `blocked`, or null. Keeps wording server-side. */
+  blockedMessage: string | null;
   myPending: boolean;
   requests: TeamSwapRequest[];
 }

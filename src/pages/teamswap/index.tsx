@@ -358,6 +358,8 @@ export default function TeamSwapPage() {
   const [localCooldown, setLocalCooldown] = useState<number | null>(null);
 
   const lowHours = status?.lowHours ?? false;
+  // Server-decided; the wording comes with it so the two can never disagree.
+  const blocked = status?.blocked ?? null;
   // Resync with the server the moment the timer runs out — the local tick is only
   // an estimate, and the server is the authority on whether the jump is allowed.
   const cooldown = useCountdown(localCooldown ?? status?.cooldownSeconds ?? 0, () => void refetch());
@@ -425,7 +427,9 @@ export default function TeamSwapPage() {
             </Notice>
             <Warning>禁止在打乱后的对局或开局5分钟后使用此功能，否则将面临封禁</Warning>
 
-            <Button size="3" disabled={busy || onCooldown} onClick={() => void submit()}>
+            {blocked && <Warning>{status?.blockedMessage}</Warning>}
+
+            <Button size="3" disabled={busy || onCooldown || !!blocked} onClick={() => void submit()}>
               {onCooldown ? `冷却中 ${formatCountdown(cooldown)}` : '一键跳边'}
             </Button>
           </>
@@ -436,6 +440,7 @@ export default function TeamSwapPage() {
             </Notice>
             {/* Without this, a player with a private profile just silently loses the
                 solo-jump path and has no idea why. */}
+            {blocked && <Warning>{status?.blockedMessage}</Warning>}
             {status && !status.hoursKnown && (
               <Warning>
                 无法读取你的游戏时长（Steam 个人资料未公开，或未公开游戏详情）。无法确认时长的玩家一律按 200 小时以上处理，需与他人互相确认才能换边。
@@ -452,7 +457,7 @@ export default function TeamSwapPage() {
                   onChange={e => setInput(e.target.value)}
                   style={{ flex: 1 }}
                 />
-                <Button type="submit" disabled={busy || onCooldown || !input.trim()}>
+                <Button type="submit" disabled={busy || onCooldown || !!blocked || !input.trim()}>
                   发送请求
                 </Button>
               </Flex>
@@ -509,13 +514,14 @@ export default function TeamSwapPage() {
                     ) : (
                       <Tooltip content={
                         req.target?.steamId !== myId ? '只有被请求的玩家才能匹配'
-                          : onCooldown ? `冷却中，剩余 ${formatCountdown(cooldown)}`
-                            : undefined
+                          : blocked ? status?.blockedMessage ?? undefined
+                            : onCooldown ? `冷却中，剩余 ${formatCountdown(cooldown)}`
+                              : undefined
                       }>
                         <Button
                           size="1"
                           variant="soft"
-                          disabled={busy || onCooldown || req.target?.steamId !== myId}
+                          disabled={busy || onCooldown || !!blocked || req.target?.steamId !== myId}
                           onClick={() => void submit(req.requester.steamId)}
                         >
                           立即匹配

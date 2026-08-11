@@ -50,7 +50,8 @@
   },
   "queues": {
     "producers": [
-      { "queue": "game-status-refresh", "binding": "GAME_STATUS_QUEUE" }
+      { "queue": "game-status-refresh", "binding": "GAME_STATUS_QUEUE" },
+      { "queue": "rcon-broadcast", "binding": "RCON_BROADCAST_QUEUE" }
     ],
     "consumers": [
       {
@@ -58,6 +59,21 @@
         "max_batch_size": 20,
         "max_batch_timeout": 30,
         "max_retries": 2
+      },
+      {
+        // Claim announcements pushed to the game server over RCON.
+        "queue": "rcon-broadcast",
+        "max_batch_size": 5,
+        // Far shorter than the game-status queue: an announcement telling someone to
+        // go confirm is useless if it lands 30s late, against a 5 minute request TTL.
+        "max_batch_timeout": 3,
+        // A pending request lives 5 minutes. Re-broadcasting a failed announcement
+        // later would advertise a request that may already be confirmed or expired.
+        "max_retries": 0,
+        // The whole point of routing this through a queue: exactly one consumer runs
+        // at a time account-wide, so concurrent claims can never open concurrent RCON
+        // connections. Same guarantee a Durable Object would give, without the DO.
+        "max_concurrency": 1
       }
     ]
   },
