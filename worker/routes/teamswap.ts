@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { requireAuth } from './auth';
 import { sendRconCommand } from '../lib/rcon';
 import { getGameStatusNow, getSteamProfiles } from '../lib/steam';
@@ -35,6 +35,46 @@ const ROSTER_TRUST_SECONDS = 5 * 60;
  *   cancel  A withdrew the claim it had against B.
  */
 const SWAP_STREAM = 'team_swap_activities';
+
+interface SwapEvent {
+  action: 'claim' | 'confirm' | 'solo' | 'cancel';
+  actorId: string;
+  partnerId: string | null;
+  /** Who RCON moved. Always the actor or the partner, so it needs no name of its own. */
+  changedSteamId: string | null;
+  success: boolean;
+  /** Claims only: whether the in-game announcement went out or was deduped away. */
+  broadcast?: boolean;
+  error?: string;
+}
+
+/**
+ * Emits one swap event with display names resolved alongside the ids.
+ *
+ * Profiles come from the KV/D1 cache these flows already populate, so this is normally
+ * a cache read. Name resolution is best effort on purpose: it runs after the swap has
+ * already happened, and a Steam outage must not turn a successful jump into a 500.
+ */
+async function logSwap(
+  c: Context<{ Bindings: Env; Variables: Variables }>,
+  event: SwapEvent,
+): Promise<void> {
+  let actorName: string | null = null;
+  let partnerName: string | null = null;
+
+  try {
+    const ids = [...new Set([event.actorId, ...(event.partnerId ? [event.partnerId] : [])])];
+    const profiles = await getSteamProfiles(ids, c.env, { skipGameStatus: true });
+    const nameOf = (id: string | null) =>
+      id === null ? null : profiles.find(p => p.steamId === id)?.name ?? null;
+    actorName = nameOf(event.actorId);
+    partnerName = nameOf(event.partnerId);
+  } catch {
+    // Fall through and log the ids alone rather than losing the event entirely.
+  }
+
+  c.var.logEvent(SWAP_STREAM, { ...event, actorName, partnerName });
+}
 
 const teamSwap = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -259,7 +299,7 @@ teamSwap.post('/', requireAuth, async c => {
       await broadcastAndForceTeamChange(c.env, gameServer, myId, 'low_hours');
     } catch (err) {
       const message = err instanceof Error ? err.message : '换队失败';
-      c.var.logEvent(SWAP_STREAM, {
+      await logSwap(c, {
         action: 'solo', actorId: myId, partnerId: null,
         changedSteamId: null, success: false, error: message,
       });
@@ -272,7 +312,7 @@ teamSwap.post('/', requireAuth, async c => {
       // Setting a cooldown an admin does not obey would only make the UI lie to them.
       ...(isAdmin ? [] : [startCooldown(myId, c.env)]),
     ]);
-    c.var.logEvent(SWAP_STREAM, {
+    await logSwap(c, {
       action: 'solo', actorId: myId, partnerId: null,
       changedSteamId: myId, success: true,
     });
@@ -309,7 +349,7 @@ teamSwap.post('/', requireAuth, async c => {
       await broadcastAndForceTeamChange(c.env, gameServer, changedId, 'matched');
     } catch (err) {
       const message = err instanceof Error ? err.message : '换队失败';
-      c.var.logEvent(SWAP_STREAM, {
+      await logSwap(c, {
         action: 'confirm', actorId: myId, partnerId: targetId,
         changedSteamId: null, success: false, error: message,
       });
@@ -325,7 +365,7 @@ teamSwap.post('/', requireAuth, async c => {
       ...(targetIsAdmin ? [] : [startCooldown(targetId, c.env)]),
     ]);
 
-    c.var.logEvent(SWAP_STREAM, {
+    await logSwap(c, {
       action: 'confirm', actorId: myId, partnerId: targetId,
       changedSteamId: changedId, success: true,
     });
@@ -363,7 +403,7 @@ teamSwap.post('/', requireAuth, async c => {
     );
   }
 
-  c.var.logEvent(SWAP_STREAM, {
+  await logSwap(c, {
     action: 'claim', actorId: myId, partnerId: targetId,
     changedSteamId: null, broadcast, success: true,
   });
@@ -377,7 +417,7 @@ teamSwap.delete('/', requireAuth, async c => {
   // a claim/cancel loop visible in the stream. Costs one extra KV read on a rare route.
   const partnerId = await c.env.STEAM_PROFILE_CACHE.get(`ts:req:${myId}`);
   await c.env.STEAM_PROFILE_CACHE.delete(`ts:req:${myId}`);
-  c.var.logEvent(SWAP_STREAM, {
+  await logSwap(c, {
     action: 'cancel', actorId: myId, partnerId,
     changedSteamId: null, success: true,
   });
