@@ -7,10 +7,10 @@ import VotePage from './pages/vote';
 import AdminPage from './pages/admin';
 import TeamSwapPage from './pages/teamswap';
 import ModalProvider from './components/ModalProvider';
-import { useGetMeQuery } from './lib/api';
+import { useProfile } from './hooks/useSession';
 
 export default function App() {
-  const { data: profile, isLoading } = useGetMeQuery();
+  const { profile, isLoading } = useProfile();
 
   if (isLoading) return null;
 

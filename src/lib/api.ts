@@ -1,12 +1,14 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import type { SteamProfile, VotesResponse, AdminMe, GameStatus, EligibilityRequest, EligibilityResponse, ConditionLabel, TeamSwapStatus, TeamSwapResult, GameServerOption, RosterResponse } from '../../shared/types';
+import type { SteamProfile, VotesResponse, SessionResponse, GameStatus, EligibilityRequest, EligibilityResponse, ConditionLabel, TeamSwapStatus, TeamSwapResult, GameServerOption, RosterResponse } from '../../shared/types';
 
 export const api = createApi({
   reducerPath: 'api',
   baseQuery: fetchBaseQuery({ baseUrl: '/' }),
-  tagTypes: ['Votes', 'AdminMe', 'TeamSwap'],
+  tagTypes: ['Votes', 'TeamSwap'],
   endpoints: builder => ({
-    getMe: builder.query<SteamProfile, void>({
+    // Profile and admin permissions in one request. Prefer the useProfile/useAdmin
+    // hooks over this endpoint directly — they narrow the result per consumer.
+    getSession: builder.query<SessionResponse, void>({
       query: () => 'api/me',
     }),
     getVotes: builder.query<VotesResponse, void>({
@@ -39,10 +41,6 @@ export const api = createApi({
     getVoters: builder.query<SteamProfile[], string>({
       query: candidateId => `api/votes/${candidateId}/voters`,
       providesTags: ['Votes'],
-    }),
-    getAdminMe: builder.query<AdminMe, void>({
-      query: () => 'admin/me',
-      providesTags: ['AdminMe'],
     }),
     getGameServers: builder.query<GameServerOption[], void>({
       query: () => 'admin/game-servers',
@@ -99,14 +97,13 @@ export const api = createApi({
 });
 
 export const {
-  useGetMeQuery,
+  useGetSessionQuery,
   useGetVotesQuery,
   useCastVoteMutation,
   useRemoveVoteMutation,
   useNominateMutation,
   useGetGameStatusQuery,
   useGetVotersQuery,
-  useGetAdminMeQuery,
   useGetGameServersQuery,
   useSendRconMutation,
   useResetVotesMutation,

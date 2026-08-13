@@ -1,7 +1,7 @@
 import styled from 'styled-components';
 import { Heading, Text } from '@radix-ui/themes';
 import { Page, Card } from '../../lib/styles';
-import { useGetMeQuery } from '../../lib/api';
+import { useProfile } from '../../hooks/useSession';
 
 const Avatar = styled.img`
 	width: 100px;
@@ -69,7 +69,7 @@ const SecondaryBtn = styled.a`
 const toHours = (minutes: number) => Math.round(minutes / 60 * 10) / 10;
 
 export default function ProfilePage() {
-  const { data: profile } = useGetMeQuery();
+  const { profile } = useProfile();
   if (!profile) return null;
 
   const status = profile.squad44Status;

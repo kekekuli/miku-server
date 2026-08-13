@@ -1,11 +1,11 @@
 import { Hono } from 'hono';
 import { getSteamProfiles, getGameStatusNow, getGameStatusQueued } from '../lib/steam';
-import { getFilterConditions } from '../lib/strapi';
+import { getFilterConditions, getAdminPermissions } from '../lib/strapi';
 import { getRoster } from '../lib/roster';
 import { evaluate } from '../lib/evaluate';
 import type { EvalContext } from '../lib/evaluate';
-import type { EligibilityRequest } from '../../shared/types';
-import { requireAuth } from './auth';
+import type { EligibilityRequest, AdminMe, SessionResponse } from '../../shared/types';
+import { parseCookie, verifyJWT } from '../lib/jwt';
 import type { Variables } from '../types';
 import votesRoute from './votes';
 import teamSwapRoute from './teamswap';
@@ -13,15 +13,33 @@ import teamSwapRoute from './teamswap';
 
 const api = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-api.get('/me', requireAuth, async c => {
-  const steamid = c.get('steamid');
-  const [profile] = await getSteamProfiles([steamid], c.env);
-  if (!profile) return c.json(null, 404);
+const ANONYMOUS: SessionResponse = { profile: null, admin: null };
+
+// Deliberately not behind requireAuth: an anonymous caller is answered with a 200 and
+// a null profile rather than a 401. Admin permissions ride along here too, so the UI
+// learns who the caller is and what they may do in a single request.
+api.get('/me', async c => {
+  const token = parseCookie(c.req.header('Cookie') ?? '')['token'];
+  const payload = token ? await verifyJWT(token, c.env.JWT_SECRET) : null;
+  if (!payload) return c.json(ANONYMOUS);
+
+  const steamid = payload.steamid;
+  // Steam and Strapi are independent, so the round trips overlap.
+  const [[profile], permissions] = await Promise.all([
+    getSteamProfiles([steamid], c.env),
+    getAdminPermissions(steamid, c.env),
+  ]);
+  if (!profile) return c.json(ANONYMOUS);
+
   if (!profile.squad44Status) {
     const statuses = await getGameStatusNow([steamid], c.env);
     profile.squad44Status = statuses[steamid];
   }
-  return c.json(profile);
+
+  const admin: AdminMe | null =
+    permissions && Object.keys(permissions).length > 0 ? { permissions } : null;
+
+  return c.json({ profile, admin });
 });
 
 api.get('/game-status/:steamId', async c => {

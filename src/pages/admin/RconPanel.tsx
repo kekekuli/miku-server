@@ -48,18 +48,19 @@ interface LogLine {
   isError: boolean;
 }
 
-interface Props {
-  rconEnabled: boolean;
-}
-
-export default function RconPanel({ rconEnabled }: Props) {
+export default function RconPanel() {
   const dispatch = useDispatch();
   const [command, setCommand] = useState('');
   const [log, setLog] = useState<LogLine[]>([]);
   const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
-  const { data: servers, isFetching: serversLoading } = useGetGameServersQuery(undefined, { skip: !rconEnabled });
+  // The list only ever contains servers with full RCON credentials, so an empty list
+  // *is* "RCON not configured" — no separate flag needed. This panel renders only for
+  // canRcon holders, so the request is always authorized.
+  const { data: servers, isFetching: serversLoading } = useGetGameServersQuery();
   const [sendRcon, { isLoading }] = useSendRconMutation();
+
+  const rconEnabled = !!servers?.length;
 
   useEffect(() => {
     if (!servers || servers.length === 0 || selectedServerId) return;
@@ -87,9 +88,10 @@ export default function RconPanel({ rconEnabled }: Props) {
     <Section>
       <Flex justify="between" align="center">
         <SectionTitle>RCON 终端</SectionTitle>
-        {!rconEnabled && <Badge color="red">未配置</Badge>}
+        {/* Only once the list is in — otherwise the badge flashes on every open. */}
+        {!serversLoading && !rconEnabled && <Badge color="red">未配置</Badge>}
       </Flex>
-      {rconEnabled && (
+      {(serversLoading || rconEnabled) && (
         <Select.Root
           value={selectedServerId ?? undefined}
           onValueChange={setSelectedServerId}

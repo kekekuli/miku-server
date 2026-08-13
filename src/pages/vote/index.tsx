@@ -4,11 +4,11 @@ import styled from 'styled-components';
 import { Button, Flex, Text, TextField } from '@radix-ui/themes';
 import {
   useGetVotesQuery,
-  useGetMeQuery,
   useCastVoteMutation,
   useRemoveVoteMutation,
   useNominateMutation,
 } from '../../lib/api';
+import { useProfile } from '../../hooks/useSession';
 import CandidateCard from '../../components/CandidateCard';
 import FilterConditionSelect from '../../components/FilterConditionSelect';
 import VotersModal from '../../components/VotersModal';
@@ -40,7 +40,7 @@ const Grid = styled.div`
 
 export default function VotePage() {
   const { data: votes } = useGetVotesQuery();
-  const { data: me } = useGetMeQuery();
+  const { profile: me } = useProfile();
   const [castVote] = useCastVoteMutation();
   const [removeVote] = useRemoveVoteMutation();
   const [nominate, { isLoading: isNominating }] = useNominateMutation();

@@ -23,9 +23,25 @@ export interface VotesResponse {
   myVote: string | null;
 }
 
+/**
+ * Only permissions the caller actually holds appear here, so `'canFoo' in permissions`
+ * and `permissions.canFoo` are equivalent — never store a `false`.
+ */
 export interface AdminMe {
   permissions: Record<string, true>;
-  features: Record<string, true>;
+}
+
+/**
+ * Everything the UI needs to know about the caller, in one request.
+ *
+ * Anonymous visitors get a 200 with both fields null — being logged out is a valid
+ * answer to "who am I", not a failure. A 401 here would make RTK Query treat the
+ * cache entry as rejected and refetch it for every new subscriber.
+ */
+export interface SessionResponse {
+  profile: SteamProfile | null;
+  /** null for anonymous visitors and for logged-in non-admins. */
+  admin: AdminMe | null;
 }
 
 export interface GameServerOption {

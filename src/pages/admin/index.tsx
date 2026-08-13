@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { AlertDialog, Button, Flex } from '@radix-ui/themes';
-import { useGetAdminMeQuery } from '../../lib/api';
+import { useAdmin } from '../../hooks/useSession';
 import RconPanel from './RconPanel';
 import VotesPanel from './VotesPanel';
 import type { PendingAction } from './types';
@@ -52,16 +52,15 @@ const PageBody = styled.div`
 `;
 
 export default function AdminPage() {
-  const { data, isLoading, isError } = useGetAdminMeQuery();
+  const { admin, isLoading } = useAdmin();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
 
   if (isLoading) return null;
-  if (isError || !data || Object.keys(data.permissions).length === 0) {
-    return <Navigate to="/" replace />;
-  }
+  // The server only fills `admin` for callers holding at least one permission.
+  if (!admin) return <Navigate to="/" replace />;
 
-  const { permissions, features } = data;
+  const { permissions } = admin;
 
   const panels: { key: string; label: string }[] = [];
   if (permissions.canRcon) panels.push({ key: 'rcon', label: 'RCON 终端' });
@@ -84,7 +83,7 @@ export default function AdminPage() {
       </Sidebar>
 
       <PageBody>
-        {activeKey === 'rcon' && <RconPanel rconEnabled={!!features.rcon} />}
+        {activeKey === 'rcon' && <RconPanel />}
         {activeKey === 'votes' && <VotesPanel permissions={permissions} onPending={setPending} />}
       </PageBody>
 

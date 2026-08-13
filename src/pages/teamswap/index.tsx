@@ -5,9 +5,9 @@ import {
   useGetTeamSwapStatusQuery,
   useSendTeamSwapMutation,
   useCancelTeamSwapMutation,
-  useGetMeQuery,
   useGetRosterQuery,
 } from '../../lib/api';
+import { useProfile } from '../../hooks/useSession';
 import type { TeamSwapRequest } from '../../../shared/types';
 
 const Container = styled.div`
@@ -366,7 +366,7 @@ type FeedbackState =
   | null;
 
 export default function TeamSwapPage() {
-  const { data: me } = useGetMeQuery();
+  const { profile: me } = useProfile();
   const myId = me?.steamId;
   const { data: status, isLoading, refetch } = useGetTeamSwapStatusQuery();
   const [sendTeamSwap, { isLoading: isSending }] = useSendTeamSwapMutation();

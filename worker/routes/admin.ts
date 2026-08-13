@@ -41,13 +41,7 @@ const admin = new Hono<AdminEnv>();
 
 admin.use('*', requireAdmin);
 
-admin.get('/me', async c => {
-  const features: Record<string, true> = {};
-  const servers = await listRconGameServers(c.env);
-  if (servers.length > 0) features.rcon = true;
-  if (c.env.OPENOBSERVE_URL && c.env.OPENOBSERVE_TOKEN) features.openobserve = true;
-  return c.json({ permissions: c.get('adminPermissions'), features });
-});
+// Admin permissions are reported by GET /api/me, together with the profile.
 
 admin.get('/game-servers', requirePermission('canRcon'), async c => {
   const servers = await listRconGameServers(c.env);

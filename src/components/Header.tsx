@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { Box, Flex, Text } from '@radix-ui/themes';
-import { useGetMeQuery, useGetAdminMeQuery } from '../lib/api';
+import { useProfile, useAdmin } from '../hooks/useSession';
 
 const navStyle = ({ isActive }: { isActive: boolean }) => ({
   opacity: isActive ? 1 : 0.6,
@@ -10,10 +10,10 @@ const navStyle = ({ isActive }: { isActive: boolean }) => ({
 });
 
 export default function Header() {
-  const { data: profile } = useGetMeQuery();
-  const { data: adminMe } = useGetAdminMeQuery();
+  const { profile } = useProfile();
+  const { admin } = useAdmin();
 
-  const isAdmin = !!adminMe && Object.keys(adminMe.permissions).length > 0;
+  const isAdmin = !!admin;
 
   return (
     <Box style={{ borderBottom: '1px solid var(--gray-4)' }} px="5">
