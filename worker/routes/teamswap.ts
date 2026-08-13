@@ -20,6 +20,22 @@ const BROADCAST_COOLDOWN_SECONDS = PENDING_TTL_SECONDS;
 // data from outside the cron's active window.
 const ROSTER_TRUST_SECONDS = 5 * 60;
 
+/**
+ * Player-facing swap activity, kept out of `admin_actions` — that stream is for
+ * privileged operations, this one is ordinary user behaviour and is far chattier.
+ *
+ * Every event is "actorId did `action`, with partnerId": the actor is always whoever
+ * sent the request, and the action says which side of the pair that makes them.
+ *
+ *   claim   A asked B to swap. `broadcast` records whether the in-game announcement
+ *           went out or was swallowed by the per-requester dedupe window.
+ *   confirm B answered A's claim, so the pair swapped. `changedSteamId` is whichever
+ *           of the two RCON actually moved — a coin flip.
+ *   solo    C jumped alone, being under the playtime threshold. No partner.
+ *   cancel  A withdrew the claim it had against B.
+ */
+const SWAP_STREAM = 'team_swap_activities';
+
 const teamSwap = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 const cooldownKey = (steamId: string) => `ts:cd:${steamId}`;
@@ -242,7 +258,12 @@ teamSwap.post('/', requireAuth, async c => {
     try {
       await broadcastAndForceTeamChange(c.env, gameServer, myId, 'low_hours');
     } catch (err) {
-      return c.json({ error: err instanceof Error ? err.message : '换队失败' }, 500);
+      const message = err instanceof Error ? err.message : '换队失败';
+      c.var.logEvent(SWAP_STREAM, {
+        action: 'solo', actorId: myId, partnerId: null,
+        changedSteamId: null, success: false, error: message,
+      });
+      return c.json({ error: message }, 500);
     }
     // Drop any request queued before this player crossed under the threshold, so it
     // cannot later match someone who is still waiting on it.
@@ -251,6 +272,10 @@ teamSwap.post('/', requireAuth, async c => {
       // Setting a cooldown an admin does not obey would only make the UI lie to them.
       ...(isAdmin ? [] : [startCooldown(myId, c.env)]),
     ]);
+    c.var.logEvent(SWAP_STREAM, {
+      action: 'solo', actorId: myId, partnerId: null,
+      changedSteamId: myId, success: true,
+    });
     return c.json({ status: 'changed', changedSteamId: myId, reason: 'low_hours', cooldownSeconds: isAdmin ? 0 : COOLDOWN_SECONDS });
   }
 
@@ -283,7 +308,12 @@ teamSwap.post('/', requireAuth, async c => {
     try {
       await broadcastAndForceTeamChange(c.env, gameServer, changedId, 'matched');
     } catch (err) {
-      return c.json({ error: err instanceof Error ? err.message : '换队失败' }, 500);
+      const message = err instanceof Error ? err.message : '换队失败';
+      c.var.logEvent(SWAP_STREAM, {
+        action: 'confirm', actorId: myId, partnerId: targetId,
+        changedSteamId: null, success: false, error: message,
+      });
+      return c.json({ error: message }, 500);
     }
 
     // Both sides spend the jump, matching the previous daily-quota behaviour — except
@@ -295,6 +325,10 @@ teamSwap.post('/', requireAuth, async c => {
       ...(targetIsAdmin ? [] : [startCooldown(targetId, c.env)]),
     ]);
 
+    c.var.logEvent(SWAP_STREAM, {
+      action: 'confirm', actorId: myId, partnerId: targetId,
+      changedSteamId: changedId, success: true,
+    });
     return c.json({ status: 'changed', changedSteamId: changedId, reason: 'matched', cooldownSeconds: isAdmin ? 0 : COOLDOWN_SECONDS });
   }
 
@@ -317,7 +351,8 @@ teamSwap.post('/', requireAuth, async c => {
   // already send AdminBroadcast straight from the admin panel, so the window stops
   // nothing and only gets in their way. No key is written for them either — nothing
   // reads it, and KV writes are the scarcest quota here.
-  if (isAdmin || !(await c.env.STEAM_PROFILE_CACHE.get(broadcastCooldownKey(myId)))) {
+  const broadcast = isAdmin || !(await c.env.STEAM_PROFILE_CACHE.get(broadcastCooldownKey(myId)));
+  if (broadcast) {
     if (!isAdmin) {
       await c.env.STEAM_PROFILE_CACHE.put(broadcastCooldownKey(myId), '1', { expirationTtl: BROADCAST_COOLDOWN_SECONDS });
     }
@@ -328,13 +363,24 @@ teamSwap.post('/', requireAuth, async c => {
     );
   }
 
+  c.var.logEvent(SWAP_STREAM, {
+    action: 'claim', actorId: myId, partnerId: targetId,
+    changedSteamId: null, broadcast, success: true,
+  });
   return c.json({ status: 'pending', message: '等待对方确认，请对方在5分钟内发出请求' });
 });
 
 // DELETE /api/team-swap — cancel own pending request
 teamSwap.delete('/', requireAuth, async c => {
   const myId = c.get('steamid');
+  // Read before deleting so the cancel names who was left waiting, which is what makes
+  // a claim/cancel loop visible in the stream. Costs one extra KV read on a rare route.
+  const partnerId = await c.env.STEAM_PROFILE_CACHE.get(`ts:req:${myId}`);
   await c.env.STEAM_PROFILE_CACHE.delete(`ts:req:${myId}`);
+  c.var.logEvent(SWAP_STREAM, {
+    action: 'cancel', actorId: myId, partnerId,
+    changedSteamId: null, success: true,
+  });
   return c.body(null, 204);
 });
 
