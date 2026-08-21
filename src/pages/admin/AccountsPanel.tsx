@@ -86,10 +86,10 @@ export default function AccountsPanel({ onPending }: Props) {
     <Section>
       <Flex justify="between" align="center" gap="3" wrap="wrap">
         <SectionTitle>账户管理</SectionTitle>
-        <Badge color="blue">{accounts?.length ?? 0} 个 identity</Badge>
+        <Badge color="blue">{accounts?.length ?? 0} 个账户</Badge>
       </Flex>
       <Text size="2" color="gray">
-        修改密码或删除 identity 都会使该账户的全部会话失效。删除 identity 不会删除 Steam 资料。
+        修改密码或删除账户都会使该账户的全部会话失效。删除账户不会删除 Steam 资料。
       </Text>
       <TextField.Root
         placeholder="按用户名或 Steam ID 搜索"
@@ -117,14 +117,14 @@ export default function AccountsPanel({ onPending }: Props) {
               color="red"
               variant="soft"
               onClick={() => onPending({
-                label: `删除 ${account.username} 的 identity？`,
-                description: '该 identity 和所有登录会话将被永久删除。Steam 资料不会删除，用户之后仍可通过 Steam 登录并重新创建 identity。',
+                label: `删除 ${account.username} 的账户？`,
+                description: '该用户名账户和所有登录会话将被永久删除。Steam 资料不会删除，用户之后仍可通过 Steam 登录并重新创建账户。',
                 run: () => {
                   void deleteAccount(account.id).unwrap().catch(error => setMessage(errorMessage(error)));
                 },
               })}
             >
-              删除 identity
+              删除账户
             </Button>
           </Flex>
           {editingAccountId === account.id ? (
