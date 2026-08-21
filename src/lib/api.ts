@@ -1,5 +1,5 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import type { SteamProfile, VotesResponse, SessionResponse, GameStatus, EligibilityRequest, EligibilityResponse, ConditionLabel, TeamSwapStatus, TeamSwapResult, GameServerOption, RosterResponse, ManagedAccount } from '../../shared/types';
+import type { SteamProfile, VotesResponse, SessionResponse, GameStatus, EligibilityRequest, EligibilityResponse, ConditionLabel, TeamSwapStatus, TeamSwapResult, GameServerOption, RosterResponse, ManagedAccount, PaginatedGameMaps, RconCommandPreset } from '../../shared/types';
 
 export const api = createApi({
   reducerPath: 'api',
@@ -68,6 +68,25 @@ export const api = createApi({
         method: 'POST',
         body,
       }),
+    }),
+    getPresetCommandPresets: builder.query<RconCommandPreset[], void>({
+      query: () => 'admin/preset-commands/presets',
+    }),
+    getGameMaps: builder.infiniteQuery<PaginatedGameMaps, string, number>({
+      infiniteQueryOptions: {
+        initialPageParam: 1,
+        getNextPageParam: lastPage => lastPage.page < lastPage.pageCount ? lastPage.page + 1 : undefined,
+      },
+      query: ({ queryArg: search, pageParam }) => ({
+        url: 'admin/preset-commands/maps',
+        params: { search, page: pageParam, pageSize: 20 },
+      }),
+    }),
+    runPresetCommand: builder.mutation<
+      { output: string; command: string; trailingComma: boolean },
+      { presetId: string; gameServerId: string; mapId?: string; attempt: number }
+    >({
+      query: body => ({ url: 'admin/preset-commands', method: 'POST', body }),
     }),
     resetVotes: builder.mutation<void, void>({
       query: () => ({ url: 'admin/votes/reset', method: 'DELETE' }),
@@ -142,6 +161,9 @@ export const {
   useGetVotersQuery,
   useGetGameServersQuery,
   useSendRconMutation,
+  useGetPresetCommandPresetsQuery,
+  useGetGameMapsInfiniteQuery,
+  useRunPresetCommandMutation,
   useResetVotesMutation,
   useDeleteCandidateMutation,
   useGetManagedAccountsQuery,

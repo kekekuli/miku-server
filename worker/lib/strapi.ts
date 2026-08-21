@@ -19,6 +19,7 @@ type FilterOperator = {
   $lt?: FilterPrimitive;
   $lte?: FilterPrimitive;
   $contains?: string;
+  $containsi?: string;
   $in?: FilterPrimitive[];
   $nin?: FilterPrimitive[];
   $null?: boolean;
@@ -26,14 +27,18 @@ type FilterOperator = {
 
 // Primitive shorthand = $eq; or explicit operator object
 type FilterValue = FilterPrimitive | FilterOperator;
-export type Filters = Record<string, FilterValue>;
+export type Filters = Record<string, FilterValue | Filters[]>;
 
 interface FindOptions {
   filters?: Filters;
-  pagination?: { limit: number };
+  pagination?: { limit: number } | { page: number; pageSize: number };
   populate?: string[];
   sort?: string;
   cacheTtl?: number;
+}
+
+interface StrapiPaginatedResponse<T> extends StrapiListResponse<T> {
+  meta: { pagination: { page: number; pageSize: number; pageCount: number; total: number } };
 }
 
 interface FindOneOptions {
@@ -64,13 +69,23 @@ export function strapi(env: Env) {
     async find<T>(collection: string, options: FindOptions = {}): Promise<T[]> {
       const query: Record<string, unknown> = {};
       if (options.filters) query.filters = options.filters;
-      if (options.pagination?.limit) query.pagination = { limit: options.pagination.limit };
+      if (options.pagination) query.pagination = options.pagination;
       if (options.populate) query.populate = options.populate;
       if (options.sort) query.sort = options.sort;
 
       const url = buildUrl(env.STRAPI_URL, collection, query);
       const res = await request<StrapiListResponse<T>>(url, env, options.cacheTtl);
       return res?.data ?? [];
+    },
+
+    async findPage<T>(collection: string, options: FindOptions): Promise<StrapiPaginatedResponse<T> | null> {
+      const query: Record<string, unknown> = {};
+      if (options.filters) query.filters = options.filters;
+      if (options.pagination) query.pagination = options.pagination;
+      if (options.populate) query.populate = options.populate;
+      if (options.sort) query.sort = options.sort;
+      const url = buildUrl(env.STRAPI_URL, collection, query);
+      return request<StrapiPaginatedResponse<T>>(url, env, options.cacheTtl);
     },
 
     async findOne<T>(uid: string, options: FindOneOptions = {}): Promise<T | null> {
@@ -219,4 +234,65 @@ export async function listRconGameServers(env: Env): Promise<GameServerOption[]>
 export async function getGameServerById(id: string, env: Env): Promise<GameServer | null> {
   const server = await strapi(env).findOne<GameServer>(`game-servers/${id}`, { cacheTtl: 60 });
   return server ? { ...server, rconPort: Number(server.rconPort) } : null;
+}
+
+export interface GameMap {
+  documentId: string;
+  displayName: string;
+  rconName: string;
+  enabled: boolean;
+  sortOrder: number;
+}
+
+export interface RconCommandPreset {
+  documentId: string;
+  displayName: string;
+  baseCommand: string;
+  argumentType: 'none' | 'map';
+  supportsTrailingComma: boolean;
+  confirmationRequired: boolean;
+  enabled: boolean;
+  sortOrder: number;
+}
+
+export async function listGameMapsPage(
+  env: Env,
+  options: { page: number; pageSize: number; search: string },
+): Promise<{ items: GameMap[]; page: number; pageCount: number; total: number }> {
+  const searchFilters: Filters[] = options.search
+    ? [
+        { displayName: { $containsi: options.search } },
+        { rconName: { $containsi: options.search } },
+      ]
+    : [];
+  const response = await strapi(env).findPage<GameMap>('game-maps', {
+    filters: { enabled: true, ...(searchFilters.length ? { $or: searchFilters } : {}) },
+    pagination: { page: options.page, pageSize: options.pageSize },
+    sort: 'sortOrder:asc',
+    cacheTtl: 60,
+  });
+  return {
+    items: response?.data ?? [],
+    page: response?.meta.pagination.page ?? options.page,
+    pageCount: response?.meta.pagination.pageCount ?? 0,
+    total: response?.meta.pagination.total ?? 0,
+  };
+}
+
+export async function getGameMapById(id: string, env: Env): Promise<GameMap | null> {
+  const map = await strapi(env).findOne<GameMap>(`game-maps/${id}`, { cacheTtl: 60 });
+  return map?.enabled ? map : null;
+}
+
+export async function listRconCommandPresets(env: Env): Promise<RconCommandPreset[]> {
+  return strapi(env).find<RconCommandPreset>('rcon-command-presets', {
+    filters: { enabled: true },
+    sort: 'sortOrder:asc',
+    cacheTtl: 60,
+  });
+}
+
+export async function getRconCommandPresetById(id: string, env: Env): Promise<RconCommandPreset | null> {
+  const preset = await strapi(env).findOne<RconCommandPreset>(`rcon-command-presets/${id}`, { cacheTtl: 60 });
+  return preset?.enabled ? preset : null;
 }

@@ -6,6 +6,7 @@ import { useAdmin } from '../../hooks/useSession';
 import RconPanel from './RconPanel';
 import VotesPanel from './VotesPanel';
 import AccountsPanel from './AccountsPanel';
+import PresetCommandsPanel from './PresetCommandsPanel';
 import type { PendingAction } from './types';
 
 const AdminLayout = styled.div`
@@ -67,6 +68,7 @@ export default function AdminPage() {
   if (permissions.canRcon) panels.push({ key: 'rcon', label: 'RCON 终端' });
   if (permissions.canManageVotes || permissions.canManageCandidates) panels.push({ key: 'votes', label: '投票管理' });
   if (permissions.canManageAccounts) panels.push({ key: 'accounts', label: '账户管理' });
+  if (permissions.canRunPresetCommands) panels.push({ key: 'preset-commands', label: '服务器操作' });
 
   const activeKey = selectedKey ?? panels[0]?.key ?? null;
 
@@ -88,6 +90,7 @@ export default function AdminPage() {
         {activeKey === 'rcon' && <RconPanel />}
         {activeKey === 'votes' && <VotesPanel permissions={permissions} onPending={setPending} />}
         {activeKey === 'accounts' && <AccountsPanel onPending={setPending} />}
+        {activeKey === 'preset-commands' && <PresetCommandsPanel onPending={setPending} />}
       </PageBody>
 
       <AlertDialog.Root open={!!pending} onOpenChange={v => { if (!v) setPending(null); }}>

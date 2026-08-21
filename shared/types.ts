@@ -72,6 +72,27 @@ export interface GameServerOption {
   isActive: boolean;
 }
 
+export interface GameMapOption {
+  id: string;
+  displayName: string;
+  rconName: string;
+}
+
+export interface RconCommandPreset {
+  id: string;
+  displayName: string;
+  argumentType: 'none' | 'map';
+  supportsTrailingComma: boolean;
+  confirmationRequired: boolean;
+}
+
+export interface PaginatedGameMaps {
+  items: GameMapOption[];
+  page: number;
+  pageCount: number;
+  total: number;
+}
+
 export interface EligibilityResult {
   key: string;
   passed: boolean;
