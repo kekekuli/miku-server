@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq } from 'drizzle-orm';
-import { candidates, votes } from '../../db/schema';
-import { parseCookie, resolveAuthToken } from '../lib/accountAuth';
+import { desc, eq } from 'drizzle-orm';
+import { accounts, accountSessions, candidates, votes } from '../../db/schema';
+import { hashPassword, parseCookie, resolveAuthToken, validatePassword } from '../lib/accountAuth';
 import { getAdminPermissions, listRconGameServers, getGameServerById } from '../lib/strapi';
 import { sendRconCommand } from '../lib/rcon';
 import type { AdminVariables } from '../types';
@@ -89,6 +89,75 @@ admin.delete('/candidates/:steamId', requirePermission('canManageCandidates'), a
   await db.delete(votes).where(eq(votes.candidateId, steamId));
   await db.delete(candidates).where(eq(candidates.steamId, steamId));
   c.var.logEvent('admin_actions', { action: 'candidate_delete', steamid: c.get('steamid'), targetSteamId: steamId });
+  return c.body(null, 204);
+});
+
+admin.get('/accounts', requirePermission('canManageAccounts'), async c => {
+  const rows = await drizzle(c.env.DB)
+    .select({
+      id: accounts.id,
+      username: accounts.username,
+      steamId: accounts.steamId,
+      createdAt: accounts.createdAt,
+      lastLoginAt: accounts.lastLoginAt,
+    })
+    .from(accounts)
+    .orderBy(desc(accounts.createdAt))
+    .limit(200);
+  return c.json(rows);
+});
+
+admin.put('/accounts/:accountId/password', requirePermission('canManageAccounts'), async c => {
+  const accountId = c.req.param('accountId');
+  const body = await c.req.json<{ password?: string }>().catch((): { password?: string } => ({}));
+  const password = body.password ?? '';
+  const passwordError = validatePassword(password);
+  if (passwordError) return c.json({ error: passwordError }, 400);
+
+  const db = drizzle(c.env.DB);
+  const [target] = await db.select({ id: accounts.id, username: accounts.username, steamId: accounts.steamId })
+    .from(accounts).where(eq(accounts.id, accountId)).limit(1);
+  if (!target) return c.json({ error: '账户不存在' }, 404);
+
+  const passwordRecord = await hashPassword(password);
+  const now = Math.floor(Date.now() / 1000);
+  await db.batch([
+    db.update(accounts).set({
+      passwordHash: passwordRecord.hash,
+      passwordSalt: passwordRecord.salt,
+      passwordHashVersion: passwordRecord.version,
+      updatedAt: now,
+    }).where(eq(accounts.id, accountId)),
+    db.update(accountSessions).set({ revokedAt: now }).where(eq(accountSessions.accountId, accountId)),
+  ]);
+  c.var.logEvent('account_activities', {
+    action: 'identity_password_reset_by_admin',
+    actorSteamId: c.get('steamid'),
+    targetAccountId: target.id,
+    targetUsername: target.username,
+    targetSteamId: target.steamId,
+  });
+  return c.body(null, 204);
+});
+
+admin.delete('/accounts/:accountId', requirePermission('canManageAccounts'), async c => {
+  const accountId = c.req.param('accountId');
+  const db = drizzle(c.env.DB);
+  const [target] = await db.select({ id: accounts.id, username: accounts.username, steamId: accounts.steamId })
+    .from(accounts).where(eq(accounts.id, accountId)).limit(1);
+  if (!target) return c.json({ error: '账户不存在' }, 404);
+
+  await db.batch([
+    db.delete(accountSessions).where(eq(accountSessions.accountId, accountId)),
+    db.delete(accounts).where(eq(accounts.id, accountId)),
+  ]);
+  c.var.logEvent('account_activities', {
+    action: 'identity_deleted_by_admin',
+    actorSteamId: c.get('steamid'),
+    targetAccountId: target.id,
+    targetUsername: target.username,
+    targetSteamId: target.steamId,
+  });
   return c.body(null, 204);
 });
 

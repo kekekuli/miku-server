@@ -1,10 +1,10 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import type { SteamProfile, VotesResponse, SessionResponse, GameStatus, EligibilityRequest, EligibilityResponse, ConditionLabel, TeamSwapStatus, TeamSwapResult, GameServerOption, RosterResponse } from '../../shared/types';
+import type { SteamProfile, VotesResponse, SessionResponse, GameStatus, EligibilityRequest, EligibilityResponse, ConditionLabel, TeamSwapStatus, TeamSwapResult, GameServerOption, RosterResponse, AdminAccount } from '../../shared/types';
 
 export const api = createApi({
   reducerPath: 'api',
   baseQuery: fetchBaseQuery({ baseUrl: '/' }),
-  tagTypes: ['Session', 'Votes', 'TeamSwap'],
+  tagTypes: ['Session', 'Votes', 'TeamSwap', 'Accounts'],
   endpoints: builder => ({
     // Profile and admin permissions in one request. Prefer the useProfile/useAdmin
     // hooks over this endpoint directly — they narrow the result per consumer.
@@ -77,6 +77,21 @@ export const api = createApi({
       query: steamId => ({ url: `admin/candidates/${steamId}`, method: 'DELETE' }),
       invalidatesTags: ['Votes'],
     }),
+    getAdminAccounts: builder.query<AdminAccount[], void>({
+      query: () => 'admin/accounts',
+      providesTags: ['Accounts'],
+    }),
+    resetAccountPassword: builder.mutation<void, { accountId: string; password: string }>({
+      query: ({ accountId, password }) => ({
+        url: `admin/accounts/${accountId}/password`,
+        method: 'PUT',
+        body: { password },
+      }),
+    }),
+    deleteAccount: builder.mutation<void, string>({
+      query: accountId => ({ url: `admin/accounts/${accountId}`, method: 'DELETE' }),
+      invalidatesTags: ['Accounts'],
+    }),
     getFilterCondition: builder.query<ConditionLabel[], void>({
       query: () => 'api/filter-conditions',
     }),
@@ -129,6 +144,9 @@ export const {
   useSendRconMutation,
   useResetVotesMutation,
   useDeleteCandidateMutation,
+  useGetAdminAccountsQuery,
+  useResetAccountPasswordMutation,
+  useDeleteAccountMutation,
   useGetFilterConditionQuery,
   useGetEligibilityQuery,
   useGetRosterQuery,

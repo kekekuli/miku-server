@@ -37,6 +37,14 @@ export interface AccountMe {
   steamLinked: boolean;
 }
 
+export interface AdminAccount {
+  id: string;
+  username: string;
+  steamId: string | null;
+  createdAt: number;
+  lastLoginAt: number | null;
+}
+
 export interface SessionMe {
   authMethod: 'identity' | 'steam';
   remembered: boolean;
