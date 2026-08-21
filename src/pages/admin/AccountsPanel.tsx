@@ -58,6 +58,7 @@ export default function AccountsPanel({ onPending }: Props) {
   const [deleteAccount] = useDeleteAccountMutation();
   const [search, setSearch] = useState('');
   const [passwords, setPasswords] = useState<Record<string, string>>({});
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const visibleAccounts = useMemo(() => {
@@ -74,6 +75,7 @@ export default function AccountsPanel({ onPending }: Props) {
     try {
       await resetPassword({ accountId, password }).unwrap();
       setPasswords(current => ({ ...current, [accountId]: '' }));
+      setEditingAccountId(null);
       setMessage(`已修改 ${username} 的密码，并撤销其全部登录会话`);
     } catch (error) {
       setMessage(errorMessage(error));
@@ -91,6 +93,8 @@ export default function AccountsPanel({ onPending }: Props) {
       </Text>
       <TextField.Root
         placeholder="按用户名或 Steam ID 搜索"
+        name="managed-account-filter"
+        autoComplete="off"
         value={search}
         onChange={event => setSearch(event.target.value)}
       />
@@ -123,24 +127,50 @@ export default function AccountsPanel({ onPending }: Props) {
               删除 identity
             </Button>
           </Flex>
-          <Flex gap="2" wrap="wrap">
-            <TextField.Root
-              type="password"
-              placeholder="输入新密码（至少 12 个字符）"
-              value={passwords[account.id] ?? ''}
-              onChange={event => setPasswords(current => ({
-                ...current,
-                [account.id]: event.target.value,
-              }))}
-              style={{ flex: '1 1 260px' }}
-            />
+          {editingAccountId === account.id ? (
+            <Flex gap="2" wrap="wrap">
+              <TextField.Root
+                type="password"
+                name="new-password"
+                autoComplete="new-password"
+                placeholder="输入新密码（至少 12 个字符）"
+                value={passwords[account.id] ?? ''}
+                onChange={event => setPasswords(current => ({
+                  ...current,
+                  [account.id]: event.target.value,
+                }))}
+                style={{ flex: '1 1 260px' }}
+              />
+              <Button
+                disabled={isResetting || (passwords[account.id]?.length ?? 0) < 12}
+                onClick={() => { void handleReset(account.id, account.username); }}
+              >
+                保存新密码
+              </Button>
+              <Button
+                variant="soft"
+                color="gray"
+                disabled={isResetting}
+                onClick={() => {
+                  setPasswords(current => ({ ...current, [account.id]: '' }));
+                  setEditingAccountId(null);
+                }}
+              >
+                取消
+              </Button>
+            </Flex>
+          ) : (
             <Button
-              disabled={isResetting || (passwords[account.id]?.length ?? 0) < 12}
-              onClick={() => { void handleReset(account.id, account.username); }}
+              variant="soft"
+              style={{ alignSelf: 'flex-start' }}
+              onClick={() => {
+                setMessage(null);
+                setEditingAccountId(account.id);
+              }}
             >
               修改密码
             </Button>
-          </Flex>
+          )}
         </AccountRow>
       ))}
     </Section>
