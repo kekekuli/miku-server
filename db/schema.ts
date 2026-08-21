@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, primaryKey } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, primaryKey, uniqueIndex, index } from 'drizzle-orm/sqlite-core';
 import type { DisplayPlayer } from '../shared/types';
 
 export const steamProfiles = sqliteTable('steam_profiles', {
@@ -8,6 +8,53 @@ export const steamProfiles = sqliteTable('steam_profiles', {
   profileUrl: text('profile_url').notNull(),
   countryCode: text('country_code'),
   updatedAt: integer('updated_at').notNull(),
+});
+
+// Optional convenient login layered over Steam. An account is initially created only
+// for a freshly Steam-authenticated user, but steamId becomes null if they later unlink.
+export const accounts = sqliteTable('accounts', {
+  id: text('id').primaryKey(),
+  username: text('username').notNull(),
+  usernameNormalized: text('username_normalized').notNull(),
+  passwordHash: text('password_hash').notNull(),
+  passwordSalt: text('password_salt').notNull(),
+  passwordHashVersion: integer('password_hash_version').notNull(),
+  steamId: text('steam_id').references(() => steamProfiles.steamId),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+  lastLoginAt: integer('last_login_at'),
+}, t => [
+  uniqueIndex('accounts_username_normalized_unique').on(t.usernameNormalized),
+  uniqueIndex('accounts_steam_id_unique').on(t.steamId),
+]);
+
+export const accountSessions = sqliteTable('account_sessions', {
+  id: text('id').primaryKey(),
+  tokenHash: text('token_hash').notNull(),
+  accountId: text('account_id').references(() => accounts.id, { onDelete: 'cascade' }),
+  steamId: text('steam_id').references(() => steamProfiles.steamId),
+  authMethod: text('auth_method', { enum: ['identity', 'steam'] }).notNull(),
+  remembered: integer('remembered', { mode: 'boolean' }).notNull(),
+  createdAt: integer('created_at').notNull(),
+  authenticatedAt: integer('authenticated_at').notNull(),
+  lastUsedAt: integer('last_used_at').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+  revokedAt: integer('revoked_at'),
+}, t => [
+  uniqueIndex('account_sessions_token_hash_unique').on(t.tokenHash),
+  index('account_sessions_account_id_idx').on(t.accountId),
+  index('account_sessions_steam_id_idx').on(t.steamId),
+]);
+
+// Single-use state for the Steam OpenID redirect. D1 is used rather than KV because
+// signup begins and returns immediately and therefore needs strongly consistent state.
+export const authStates = sqliteTable('auth_states', {
+  id: text('id').primaryKey(),
+  intent: text('intent', { enum: ['login', 'signup', 'link'] }).notNull(),
+  accountId: text('account_id').references(() => accounts.id, { onDelete: 'cascade' }),
+  remembered: integer('remembered', { mode: 'boolean' }).notNull(),
+  createdAt: integer('created_at').notNull(),
+  expiresAt: integer('expires_at').notNull(),
 });
 
 export const steamGameStatus = sqliteTable('steam_game_status', {

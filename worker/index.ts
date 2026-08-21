@@ -10,11 +10,13 @@ import { pollRoster, ROSTER_CRON } from './lib/roster';
 import { handleClaimBroadcasts, RCON_BROADCAST_QUEUE, type ClaimBroadcastMessage } from './lib/broadcast';
 import { candidates, votes } from '../db/schema';
 import { openobserve } from './lib/openobserve';
+import { requireSameOrigin } from './lib/csrf';
 import type { Variables } from './types';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 app.use('*', openobserve);
+app.use('*', requireSameOrigin);
 app.route('/auth', auth);
 app.route('/api', api);
 app.route('/admin', admin);

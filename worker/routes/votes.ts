@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { count, eq } from 'drizzle-orm';
 import { candidates, votes } from '../../db/schema';
-import { parseCookie, verifyJWT } from '../lib/jwt';
+import { parseCookie, resolveAuthToken } from '../lib/accountAuth';
 import { requireAuth } from './auth';
 import { getSteamProfiles } from '../lib/steam';
 import { checkGate } from '../lib/gate';
@@ -13,10 +13,8 @@ const votesRoute = new Hono<{ Bindings: Env; Variables: Variables }>();
 votesRoute.get('/', async c => {
   let myId: string | null = null;
   const token = parseCookie(c.req.header('Cookie') ?? '')['token'];
-  if (token) {
-    const payload = await verifyJWT(token, c.env.JWT_SECRET);
-    if (payload) myId = payload.steamid;
-  }
+  const session = await resolveAuthToken(token, c.env);
+  if (session?.steamId) myId = session.steamId;
 
   const db = drizzle(c.env.DB);
   const [allCandidates, voteCounts, myVoteRow] = await Promise.all([

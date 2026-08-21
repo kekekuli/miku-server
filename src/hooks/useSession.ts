@@ -1,5 +1,5 @@
 import { useGetSessionQuery } from '../lib/api';
-import type { SteamProfile, AdminMe } from '../../shared/types';
+import type { SteamProfile, AdminMe, AccountMe, SessionMe } from '../../shared/types';
 
 /**
  * Profile and admin permissions arrive together from GET /api/me, so every consumer
@@ -17,5 +17,17 @@ export function useProfile(): { profile: SteamProfile | null; isLoading: boolean
 export function useAdmin(): { admin: AdminMe | null; isLoading: boolean } {
   return useGetSessionQuery(undefined, {
     selectFromResult: ({ data, isLoading }) => ({ admin: data?.admin ?? null, isLoading }),
+  });
+}
+
+export function useAccount(): { account: AccountMe | null; isLoading: boolean } {
+  return useGetSessionQuery(undefined, {
+    selectFromResult: ({ data, isLoading }) => ({ account: data?.account ?? null, isLoading }),
+  });
+}
+
+export function useSessionInfo(): { session: SessionMe | null; isLoading: boolean } {
+  return useGetSessionQuery(undefined, {
+    selectFromResult: ({ data, isLoading }) => ({ session: data?.session ?? null, isLoading }),
   });
 }

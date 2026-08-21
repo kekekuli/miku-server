@@ -3,7 +3,7 @@ import { createMiddleware } from 'hono/factory';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq } from 'drizzle-orm';
 import { candidates, votes } from '../../db/schema';
-import { parseCookie, verifyJWT } from '../lib/jwt';
+import { parseCookie, resolveAuthToken } from '../lib/accountAuth';
 import { getAdminPermissions, listRconGameServers, getGameServerById } from '../lib/strapi';
 import { sendRconCommand } from '../lib/rcon';
 import type { AdminVariables } from '../types';
@@ -16,17 +16,17 @@ const requireAdmin = createMiddleware<AdminEnv>(async (c, next) => {
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
-  const payload = await verifyJWT(token, c.env.JWT_SECRET);
-  if (!payload) {
+  const session = await resolveAuthToken(token, c.env);
+  if (!session?.steamId) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
-  const permissions = await getAdminPermissions(payload.steamid, c.env);
+  const permissions = await getAdminPermissions(session.steamId, c.env);
   if (!permissions) {
     return c.json({ error: 'Forbidden' }, 403);
   }
 
-  c.set('steamid', payload.steamid);
+  c.set('steamid', session.steamId);
   c.set('adminPermissions', permissions);
   await next();
 });

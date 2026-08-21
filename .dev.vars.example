@@ -1,6 +1,4 @@
 STEAM_API_KEY=your_steam_api_key
-JWT_SECRET=your_jwt_secret_min_32_chars
-JWT_EXPIRES_IN=7d
 
 STRAPI_URL=https://your-strapi-instance.example.com
 STRAPI_API_TOKEN=your_strapi_api_token

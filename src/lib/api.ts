@@ -4,12 +4,29 @@ import type { SteamProfile, VotesResponse, SessionResponse, GameStatus, Eligibil
 export const api = createApi({
   reducerPath: 'api',
   baseQuery: fetchBaseQuery({ baseUrl: '/' }),
-  tagTypes: ['Votes', 'TeamSwap'],
+  tagTypes: ['Session', 'Votes', 'TeamSwap'],
   endpoints: builder => ({
     // Profile and admin permissions in one request. Prefer the useProfile/useAdmin
     // hooks over this endpoint directly — they narrow the result per consumer.
     getSession: builder.query<SessionResponse, void>({
       query: () => 'api/me',
+      providesTags: ['Session'],
+    }),
+    loginIdentity: builder.mutation<void, { username: string; password: string; remember: boolean }>({
+      query: body => ({ url: 'auth/identity/login', method: 'POST', body }),
+      invalidatesTags: ['Session'],
+    }),
+    createIdentity: builder.mutation<void, { username: string; password: string }>({
+      query: body => ({ url: 'auth/identity', method: 'POST', body }),
+      invalidatesTags: ['Session'],
+    }),
+    unlinkSteam: builder.mutation<void, { password: string }>({
+      query: body => ({ url: 'auth/steam-link', method: 'DELETE', body }),
+      invalidatesTags: ['Session'],
+    }),
+    logout: builder.mutation<void, void>({
+      query: () => ({ url: 'auth/logout', method: 'POST' }),
+      invalidatesTags: ['Session'],
     }),
     getVotes: builder.query<VotesResponse, void>({
       query: () => 'api/votes',
@@ -98,6 +115,10 @@ export const api = createApi({
 
 export const {
   useGetSessionQuery,
+  useLoginIdentityMutation,
+  useCreateIdentityMutation,
+  useUnlinkSteamMutation,
+  useLogoutMutation,
   useGetVotesQuery,
   useCastVoteMutation,
   useRemoveVoteMutation,

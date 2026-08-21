@@ -31,17 +31,31 @@ export interface AdminMe {
   permissions: Record<string, true>;
 }
 
+export interface AccountMe {
+  id: string;
+  username: string;
+  steamLinked: boolean;
+}
+
+export interface SessionMe {
+  authMethod: 'identity' | 'steam';
+  remembered: boolean;
+}
+
 /**
  * Everything the UI needs to know about the caller, in one request.
  *
- * Anonymous visitors get a 200 with both fields null — being logged out is a valid
+ * Anonymous visitors get a 200 with all fields null — being logged out is a valid
  * answer to "who am I", not a failure. A 401 here would make RTK Query treat the
  * cache entry as rejected and refetch it for every new subscriber.
  */
 export interface SessionResponse {
+  /** Optional convenient username/password identity. */
+  account: AccountMe | null;
   profile: SteamProfile | null;
   /** null for anonymous visitors and for logged-in non-admins. */
   admin: AdminMe | null;
+  session: SessionMe | null;
 }
 
 export interface GameServerOption {

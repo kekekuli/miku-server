@@ -6,11 +6,14 @@ import ProfilePage from './pages/profile';
 import VotePage from './pages/vote';
 import AdminPage from './pages/admin';
 import TeamSwapPage from './pages/teamswap';
+import SignupPage from './pages/signup';
+import AccountPage from './pages/account';
 import ModalProvider from './components/ModalProvider';
-import { useProfile } from './hooks/useSession';
+import { useAccount, useProfile } from './hooks/useSession';
 
 export default function App() {
   const { profile, isLoading } = useProfile();
+  const { account } = useAccount();
 
   if (isLoading) return null;
 
@@ -19,12 +22,14 @@ export default function App() {
       <ModalProvider />
       <Header />
       <Routes>
-{profile ? (
+        <Route path="/signup" element={<SignupPage />} />
+{profile || account ? (
           <>
-            <Route path="/" element={<ProfilePage />} />
-            <Route path="/vote" element={<VotePage />} />
-            <Route path="/team-swap" element={<TeamSwapPage />} />
-            <Route path="/admin" element={<AdminPage />} />
+            <Route path="/" element={profile ? <ProfilePage /> : <AccountPage />} />
+            <Route path="/account" element={<AccountPage />} />
+            {profile && <Route path="/vote" element={<VotePage />} />}
+            {profile && <Route path="/team-swap" element={<TeamSwapPage />} />}
+            {profile && <Route path="/admin" element={<AdminPage />} />}
             <Route path="*" element={<Navigate to="/" replace />} />
           </>
         ) : (
