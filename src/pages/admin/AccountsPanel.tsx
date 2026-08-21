@@ -3,7 +3,7 @@ import styled from 'styled-components';
 import { Badge, Button, Flex, Text, TextField } from '@radix-ui/themes';
 import {
   useDeleteAccountMutation,
-  useGetAdminAccountsQuery,
+  useGetManagedAccountsQuery,
   useResetAccountPasswordMutation,
 } from '../../lib/api';
 import type { PendingAction } from './types';
@@ -53,7 +53,7 @@ interface Props {
 }
 
 export default function AccountsPanel({ onPending }: Props) {
-  const { data: accounts, isLoading } = useGetAdminAccountsQuery();
+  const { data: accounts, isLoading } = useGetManagedAccountsQuery();
   const [resetPassword, { isLoading: isResetting }] = useResetAccountPasswordMutation();
   const [deleteAccount] = useDeleteAccountMutation();
   const [search, setSearch] = useState('');

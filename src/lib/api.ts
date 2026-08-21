@@ -1,5 +1,5 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import type { SteamProfile, VotesResponse, SessionResponse, GameStatus, EligibilityRequest, EligibilityResponse, ConditionLabel, TeamSwapStatus, TeamSwapResult, GameServerOption, RosterResponse, AdminAccount } from '../../shared/types';
+import type { SteamProfile, VotesResponse, SessionResponse, GameStatus, EligibilityRequest, EligibilityResponse, ConditionLabel, TeamSwapStatus, TeamSwapResult, GameServerOption, RosterResponse, ManagedAccount } from '../../shared/types';
 
 export const api = createApi({
   reducerPath: 'api',
@@ -77,7 +77,7 @@ export const api = createApi({
       query: steamId => ({ url: `admin/candidates/${steamId}`, method: 'DELETE' }),
       invalidatesTags: ['Votes'],
     }),
-    getAdminAccounts: builder.query<AdminAccount[], void>({
+    getManagedAccounts: builder.query<ManagedAccount[], void>({
       query: () => 'admin/accounts',
       providesTags: ['Accounts'],
     }),
@@ -144,7 +144,7 @@ export const {
   useSendRconMutation,
   useResetVotesMutation,
   useDeleteCandidateMutation,
-  useGetAdminAccountsQuery,
+  useGetManagedAccountsQuery,
   useResetAccountPasswordMutation,
   useDeleteAccountMutation,
   useGetFilterConditionQuery,

@@ -37,7 +37,7 @@ export interface AccountMe {
   steamLinked: boolean;
 }
 
-export interface AdminAccount {
+export interface ManagedAccount {
   id: string;
   username: string;
   steamId: string | null;
